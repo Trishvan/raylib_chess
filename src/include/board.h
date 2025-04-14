@@ -1,11 +1,17 @@
-#ifndef BOARD_H
-#define BOARD_H
-
+#include "linked_list.h"
 #include "raylib.h"
-#include "config.h" // Include config.h
 
-// --- Function Declarations ---
-void DrawChessboard(void);
-void InitializeBoard(int board[BOARD_SIZE][BOARD_SIZE]);
+typedef struct piece Piece;
 
-#endif
+typedef struct square {
+	int row;
+	int col;
+	Color c;
+	Piece* resident;
+} Square;
+
+void InitBoard(void);
+void DrawBoard(void);
+void UpdateBoard(void);
+Square* GetSquareAt(int, int);
+

@@ -1,42 +1,188 @@
+#include <stdlib.h>
+#include <assert.h>
 #include "board.h"
-#include "textures.h" // Include textures.h for access to color variables
-#include "config.h"
+#include "pieces.h"
+#include "consts.h"
+#include "assets.h"
 
-void DrawChessboard(void) {
-    for (int row = 0; row < BOARD_SIZE; row++) {
-        for (int col = 0; col < BOARD_SIZE; col++) {
-            Color squareColor = ((row + col) % 2 == 0) ? lightSquareColor : darkSquareColor;
-            DrawRectangle(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, squareColor);
-        }
-    }
+static Square* squares = NULL;
+static void UpdatePawn(Piece*, int, int);
+static void UpdateKnight(Piece*, int, int);
+
+void InitBoard(void) {
+	assert(squares == NULL);
+	squares = (Square*) malloc(sizeof(Square) * NUM_COLS * NUM_ROWS);
+	for (int i = 0; i < NUM_ROWS; i++) {
+		for (int j = 0; j < NUM_COLS; j++) {
+			Square* sq = &squares[i * NUM_COLS + j];
+			sq->row = i;
+			sq->col = j;
+			if ((i + j) % 2 == 1) {
+				sq->c = DARKBROWN;
+			} else {
+				sq->c = BEIGE;
+			}
+			sq->resident = NULL;
+		}
+	}
+
+	// Setup pawns.
+	for (int i = 0; i < NUM_ROWS; i++) {
+		Square* sq1 = &squares[NUM_COLS + i];
+		Square* sq2 = &squares[(NUM_ROWS - 2) * NUM_COLS + i];
+		sq1->resident = NewPiece(PAWN_ID, BLACK_ID);
+		sq2->resident = NewPiece(PAWN_ID, WHITE_ID);
+	}
+	// Rooks
+	squares[0].resident = NewPiece(ROOK_ID, BLACK_ID);
+	squares[7].resident = NewPiece(ROOK_ID, BLACK_ID);
+	squares[NUM_COLS * 7].resident = NewPiece(ROOK_ID, WHITE_ID);
+	squares[NUM_COLS * 7 + 7].resident = NewPiece(ROOK_ID, WHITE_ID);
+	// Knights
+	squares[1].resident = NewPiece(KNIGHT_ID, BLACK_ID);
+	squares[6].resident = NewPiece(KNIGHT_ID, BLACK_ID);
+	squares[NUM_COLS * 7 + 1].resident = NewPiece(KNIGHT_ID, WHITE_ID);
+	squares[NUM_COLS * 7 + 6].resident = NewPiece(KNIGHT_ID, WHITE_ID);
+	// Bishops
+	squares[2].resident = NewPiece(BISHOP_ID, BLACK_ID);
+	squares[5].resident = NewPiece(BISHOP_ID, BLACK_ID);
+	squares[NUM_COLS * 7 + 2].resident = NewPiece(BISHOP_ID, WHITE_ID);
+	squares[NUM_COLS * 7 + 5].resident = NewPiece(BISHOP_ID, WHITE_ID);
+	// King and queen
+	squares[3].resident = NewPiece(QUEEN_ID, BLACK_ID);
+	squares[4].resident = NewPiece(KING_ID, BLACK_ID);
+	squares[NUM_COLS * 7 + 3].resident = NewPiece(QUEEN_ID, WHITE_ID);
+	squares[NUM_COLS * 7 + 4].resident = NewPiece(KING_ID, WHITE_ID);
+	UpdateBoard();
 }
 
-void InitializeBoard(int board[BOARD_SIZE][BOARD_SIZE]) {
-    // Set up the initial board state.
-    for (int col = 0; col < BOARD_SIZE; ++col) {
-        board[1][col] = 1; // White pawns
-        board[6][col] = 7; // Black pawns
-    }
-    board[0][0] = 2; // White rook
-    board[0][7] = 2;
-    board[7][0] = 8; // Black rook
-    board[7][7] = 8;
-    board[0][1] = 3; // White knight
-    board[0][6] = 3;
-    board[7][1] = 9; // Black knight
-    board[7][6] = 9;
-    board[0][2] = 4; // White bishop
-    board[0][5] = 4;
-    board[7][2] = 10; // Black bishop
-    board[7][5] = 10;
-    board[0][3] = 5; // White queen
-    board[0][4] = 6; // White king
-    board[7][3] = 11; // Black queen
-    board[7][4] = 12; // Black king
+void DrawBoard(void) {
+	assert(squares != NULL);
+	for (int i = 0; i < NUM_COLS * NUM_ROWS; i++) {
+		float sqX = squares[i].col * SQUARE_SIZE;
+		float sqY = squares[i].row * SQUARE_SIZE;
+		DrawRectangle(sqX, sqY, SQUARE_SIZE, SQUARE_SIZE, squares[i].c);
+		if (squares[i].resident) {
+			DrawPiece(squares[i].resident, sqX, sqY);
+		}
+	}
+}
 
-    for (int row = 2; row < 6; ++row) {
-        for (int col = 0; col < BOARD_SIZE; ++col) {
-            board[row][col] = 0; // Empty squares
-        }
-    }
+void UpdateBoard(void) {
+	assert(squares != NULL);
+	for (int i = 0; i < NUM_COLS * NUM_ROWS; i++) {
+		Square* sq = squares + i;
+		Piece* p = sq->resident;
+		if (p) {
+			Empty(p->attacking);
+			int row = i / NUM_COLS;
+			int col = i % NUM_COLS;
+			switch (p->id) {
+				case PAWN_ID:
+					UpdatePawn(p, row, col);
+					break;
+				case KNIGHT_ID:
+					UpdateKnight(p, row, col);
+					break;
+			}
+		}
+	}
+}
+
+static void UpdatePawn(Piece* p, int row, int col) {
+	Square* ahead = NULL;
+	if (p->side == WHITE_ID) {
+		ahead = &squares[(row - 1) * NUM_COLS + col];
+	} else {
+		ahead = &squares[(row + 1) * NUM_COLS + col];
+	}
+	if (!ahead->resident) {
+		Push(p->attacking, ahead);
+		if (p->state == UNMOVED) {
+			Square* ahead2;
+			if (p->side == WHITE_ID) {
+				ahead2 = &squares[(row - 2) * NUM_COLS + col];
+			} else {
+				ahead2 = &squares[(row + 2) * NUM_COLS + col];
+			}
+			if (!ahead2->resident) Push(p->attacking, ahead2);
+		}
+	}
+	Square* left;
+	Square* right;
+	if (col > 0) left = ahead - 1;
+	if (col < 7) right = ahead + 1;
+	if (p->side == BLACK_ID) {
+		Square* temp = left;
+		left = right;
+		right = temp;
+	}
+	if (left && left->resident) Push(p->attacking, left);
+	if (right && right->resident) Push(p->attacking, right);
+}
+
+static void UpdateKnight(Piece* p, int row, int col) {
+	if (row > 1) {
+		if (col > 0) {
+			// left availiable
+			Square* sq = &squares[(row - 2) * NUM_COLS + col - 1];
+			Push(p->attacking, sq);
+		}
+		if (col < 7) {
+			// right availiable
+			Square* sq = &squares[(row - 2) * NUM_COLS + col + 1];
+			Push(p->attacking, sq);
+		}
+	}
+	if (row < 6) {
+		if (col > 0) {
+			// left availiable
+			Square* sq = &squares[(row + 2) * NUM_COLS + col - 1];
+			Push(p->attacking, sq);
+		}
+		if (col < 7) {
+			// right availiable
+			Square* sq = &squares[(row + 2) * NUM_COLS + col + 1];
+			Push(p->attacking, sq);
+		}
+	}
+	if (col > 1) {
+		if (row > 0) {
+			// top availiable
+			Square* sq = &squares[(row - 1) * NUM_COLS + col - 2];
+			Push(p->attacking, sq);
+		}
+		if (row < 7) {
+			// bot availiable
+			Square* sq = &squares[(row + 1) * NUM_COLS + col - 2];
+			Push(p->attacking, sq);
+		}
+	}
+	if (col < 6) {
+		if (row > 0) {
+			// top availiable
+			Square* sq = &squares[(row - 1) * NUM_COLS + col + 2];
+			Push(p->attacking, sq);
+		}
+		if (row < 7) {
+			// bot availiable
+			Square* sq = &squares[(row + 1) * NUM_COLS + col + 2];
+			Push(p->attacking, sq);
+		}
+	}
+}
+
+Square* GetSquareAt(int posX, int posY) {
+	int tgtRow = (int) (posY / SQUARE_SIZE);
+	int tgtCol = (int) (posX / SQUARE_SIZE);
+	Square* tgtSquare = &squares[tgtRow * NUM_COLS + tgtCol];
+	return tgtSquare;
+}
+
+void DestroyBoard(void) {
+	assert(squares != NULL);
+	for (int i = 0; i < NUM_COLS * NUM_ROWS; i++) {
+		DestroyPiece(squares[i].resident);
+	}
+	free(squares);
 }

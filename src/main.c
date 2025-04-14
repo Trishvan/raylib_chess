@@ -1,39 +1,74 @@
-#include "raylib.h"
-#include "board.h"
-#include "pieces.h"
-#include "textures.h"
-#include "config.h" // Include config.h
 #include <stdio.h>
+#include "raylib.h"
+#include "pieces.h"
+#include "board.h"
+#include "assets.h"
+#include "consts.h"
 
+static Piece* floatingPiece;
+static Square* originalSquare;
 
-// --- Global Variables ---
-int board[BOARD_SIZE][BOARD_SIZE];
+void UpdateInput(void) {
+	Square* sq = GetSquareAt(GetMouseX(), GetMouseY());
+	if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+		UpdateBoard();
+		if (sq->resident && !floatingPiece) {
+			floatingPiece = sq->resident;
+			originalSquare = sq;
+			sq->resident = NULL;
+		}
+	} else if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+		if (originalSquare) {
+			if (sq->resident && sq->resident->side == floatingPiece->side) {
+				originalSquare->resident = floatingPiece;
+			} else {
+				if (Contains(floatingPiece->attacking, sq)) {
+					DestroyPiece(sq->resident);
+					sq->resident = floatingPiece;
+					if (floatingPiece->state == UNMOVED) {
+						floatingPiece->state = MOVED;
+					}
+				} else {
+					originalSquare->resident = floatingPiece;
+				}
+			}
+			originalSquare = NULL;
+		}
+		floatingPiece = NULL;
+	}
+}
 
-int main(void) {
-    // --- Initialization ---
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Raylib Chess");
-    SetTargetFPS(60);
+int main(void)
+{
+	// Initialization
+	//--------------------------------------------------------------------------------------
+	const int screenWidth = SQUARE_SIZE * NUM_COLS;
+	const int screenHeight = SQUARE_SIZE * NUM_ROWS;
 
-    LoadGameTextures();
-    InitializeBoard(board); // Pass the board array
+	InitWindow(screenWidth, screenHeight, "The Game of Chess");
+	LoadAssets();
+	InitBoard();
 
-    // --- Main Game Loop ---
-    while (!WindowShouldClose()) {
-        // --- Drawing ---
-        BeginDrawing();
-        ClearBackground(RAYWHITE);
-        DrawChessboard();
-        DrawPieces(board); // Pass the board array
-        EndDrawing();
-        // --- Input ---
-        // Add input handling here
-        // --- Logic ---
-        // Add game logic here
-    }
+	SetTargetFPS(30);
+	//--------------------------------------------------------------------------------------
 
-    // --- Cleanup ---
-    UnloadGameTextures();
-    CloseWindow();
+	// Main game loop
+	while (!WindowShouldClose())	// Detect window close button or ESC key
+	{
+		UpdateInput();
+		BeginDrawing();
+			ClearBackground(BLACK);
+			DrawBoard();
+			if (floatingPiece) {
+				DrawPieceCenter(floatingPiece, GetMouseX(), GetMouseY());
+			}
+		EndDrawing();
+	}
 
-    return 0;
+	// De-Initialization
+	//--------------------------------------------------------------------------------------
+	CloseWindow();		  // Close window and OpenGL context
+	//--------------------------------------------------------------------------------------
+
+	return 0;
 }

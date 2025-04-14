@@ -1,11 +1,17 @@
-#ifndef PIECES_H
-#define PIECES_H
-
 #include "raylib.h"
-#include "config.h" // Include config.h
+#include "linked_list.h"
 
+typedef struct square Square;
 
-// --- Function Declarations ---
-void DrawPieces(const int board[BOARD_SIZE][BOARD_SIZE]);
+typedef struct piece {
+	int id;
+	int side;
+	int state;
+	Node* attacking;
+} Piece;
 
-#endif
+Piece* NewPiece(int, int);
+void DrawPiece(Piece*, float, float);
+void DrawPieceCenter(Piece*, float, float);
+void DestroyPiece(Piece*);
+
