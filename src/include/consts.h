@@ -21,4 +21,7 @@
 #define PINNED 2
 #define CHECKED 3
 
+#define AI_SIDE 1
+#define PLAYER_SIDE 2
+
 #endif

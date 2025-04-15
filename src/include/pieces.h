@@ -1,3 +1,6 @@
+#ifndef PIECES_H
+#define PIECES_H
+
 #include "raylib.h"
 #include "linked_list.h"
 
@@ -10,8 +13,10 @@ typedef struct piece {
 	Node* attacking;
 } Piece;
 
+
+
 Piece* NewPiece(int, int);
 void DrawPiece(Piece*, float, float);
 void DrawPieceCenter(Piece*, float, float);
 void DestroyPiece(Piece*);
-
+#endif

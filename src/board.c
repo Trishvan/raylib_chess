@@ -186,3 +186,7 @@ void DestroyBoard(void) {
 	}
 	free(squares);
 }
+
+Square* GetSquare(int index) {
+    return &squares[index];
+}

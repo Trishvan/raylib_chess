@@ -4,16 +4,18 @@
 #include "board.h"
 #include "assets.h"
 #include "consts.h"
+#include "ai.h"
 
 static Piece* floatingPiece = NULL;
 static Square* originalSquare = NULL;
+int currentTurn = 0;
 static int currentPlayer = WHITE_ID; // Track current turn
 
 // Basic evaluation function for minimax
 int EvaluateBoard() {
     int score = 0;
     for (int i = 0; i < NUM_COLS * NUM_ROWS; i++) {
-        Piece* p = GetSquare(i).resident;
+        Piece* p = GetSquare(i)->resident;
         if (p) {
             int value = 0;
             switch (p->id) {
@@ -111,9 +113,11 @@ void AIMove() {
 
 void UpdateInput(void) {
     if (currentPlayer == BLACK_ID) {
-        AIMove();
-        return;
-    }
+		Move aiMove = GetRandomMove(AI_SIDE);
+		MakeMove(aiMove);
+		currentTurn = PLAYER_SIDE;
+		}
+		
 
     Square* sq = GetSquareAt(GetMouseX(), GetMouseY());
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
