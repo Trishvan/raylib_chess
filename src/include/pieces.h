@@ -10,7 +10,7 @@ typedef struct piece {
 	int id;
 	int side;
 	int state;
-	Node* attacking;
+	List* attacking;
 } Piece;
 
 

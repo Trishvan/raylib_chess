@@ -7,6 +7,13 @@ typedef struct node {
 	struct node* next;
 } Node;
 
+typedef struct {
+    Node* head;
+    int size;
+} List;
+
+void* get(List* list, int index);
+
 Node* NewHead(void); // Return a new head.
 void Push(Node* head, void* data); // Add new node with data to back of list.
 void* Pop(Node* head); // Remove node at back of list (returns and does not free data).

@@ -18,7 +18,8 @@ void GenerateAllMoves(int side, Move* moves, int* moveCount) {
             if (p->attacking && p->attacking->data) {
                 for (int j = 0; j < p->attacking->size; j++) {
                     // Correct casting from void* to Square*
-                    Square* target = (Square*)p->attacking->data[j];
+                    Square* target = (Square*)get(p->attacking, j);
+
                     Move m = {
                         .fromRow = sq->row,
                         .fromCol = sq->col,

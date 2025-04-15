@@ -5,9 +5,10 @@
 #include "pieces.h"
 
 typedef struct {
-    Square** data; // An array of squares that the piece is attacking
-    int size; // The number of squares being attacked
+    Square** data; // Array of Square* (pointer to Square pointers)
+    int size;      // Number of attacking squares
 } AttackingSquares;
+
 
 // Function to initialize AI-related structures
 void InitAI(void);
