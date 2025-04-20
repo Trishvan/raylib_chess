@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "d:/a/AI_project/raylib_chess",
-      "program": "d:/a/AI_project/raylib_chess/build/Debug/outDebug",
+      "cwd": "d:/a/AI_project/raylib_chess/src",
+      "program": "d:/a/AI_project/raylib_chess/src/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

@@ -1,0 +1,1546 @@
+Displaying file contents in the current directory and subdirectories... 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Board.cpp 
+#include "Board.h"
+#include "pieces/Peon.h"
+#include "pieces/Rook.h"
+#include "pieces/Knight.h"
+#include "pieces/Bishop.h"
+#include "pieces/Queen.h"
+#include "pieces/King.h"
+
+#include <string>
+#include <map>
+
+Board::Board(const Board& other) {
+    Clear();
+
+    for (Piece* whitePiece : other.whitePieces) {
+        Piece* newPiece = Piece::CreatePieceByType(whitePiece->type, whitePiece->GetPosition(), whitePiece->color);
+        Add(newPiece);
+    }
+
+    for (Piece* blackPiece : other.blackPieces) {
+        Piece* newPiece = Piece::CreatePieceByType(blackPiece->type, blackPiece->GetPosition(), blackPiece->color);
+        Add(newPiece);
+    }
+}
+
+Board::~Board() {
+    Clear();
+}
+
+void Board::Init() {
+    // Init black pieces (computer).
+    for (int j = 0; j < 8; j++) {
+        Add(new Peon({1, j}, PIECE_COLOR::C_BLACK));
+    }
+
+    Add(new Rook({0, 0}, PIECE_COLOR::C_BLACK));
+    Add(new Rook({0, 7}, PIECE_COLOR::C_BLACK));
+
+    Add(new Knight({0, 1}, PIECE_COLOR::C_BLACK));
+    Add(new Knight({0, 6}, PIECE_COLOR::C_BLACK));
+
+    Add(new Bishop({0, 2}, PIECE_COLOR::C_BLACK));
+    Add(new Bishop({0, 5}, PIECE_COLOR::C_BLACK));
+
+    Add(new Queen({0, 3}, PIECE_COLOR::C_BLACK));
+    Add(new King({0, 4}, PIECE_COLOR::C_BLACK));
+
+    // Init white pieces (player).
+    for (int j = 0; j < 8; j++) {
+        Add(new Peon({6, j}, PIECE_COLOR::C_WHITE));
+    }
+
+    Add(new Rook({7, 0}, PIECE_COLOR::C_WHITE));
+    Add(new Rook({7, 7}, PIECE_COLOR::C_WHITE));
+
+    Add(new Knight({7, 1}, PIECE_COLOR::C_WHITE));
+    Add(new Knight({7, 6}, PIECE_COLOR::C_WHITE));
+
+    Add(new Bishop({7, 2}, PIECE_COLOR::C_WHITE));
+    Add(new Bishop({7, 5}, PIECE_COLOR::C_WHITE));
+
+    Add(new Queen({7, 3}, PIECE_COLOR::C_WHITE));
+    Add(new King({7, 4}, PIECE_COLOR::C_WHITE));
+}
+
+Piece* Board::At(const Position& position) const {
+    if (!IsPositionWithinBoundaries(position)) return nullptr;
+
+    for (Piece* whitePiece : whitePieces) {
+        if (whitePiece->GetPosition().i == position.i && whitePiece->GetPosition().j == position.j) {
+            return whitePiece;
+        }
+    }
+
+    for (Piece* blackPiece : blackPieces) {
+        if (blackPiece->GetPosition().i == position.i && blackPiece->GetPosition().j == position.j) {
+            return blackPiece;
+        }
+    }
+
+    return nullptr;
+}
+
+void Board::Add(Piece* piece) {
+    if (piece->color == PIECE_COLOR::C_WHITE) {
+        whitePieces.push_back(piece);
+    } else {
+        blackPieces.push_back(piece);
+    }
+}
+
+void Board::Destroy(const Position& position) {
+    for (unsigned int i = 0; i < whitePieces.size(); i++) {
+        if (whitePieces[i]->GetPosition().i == position.i && whitePieces[i]->GetPosition().j == position.j) {
+            delete whitePieces[i];
+            whitePieces.erase(whitePieces.begin() + i);
+            return;
+        }
+    }
+
+    for (unsigned int i = 0; i < blackPieces.size(); i++) {
+        if (blackPieces[i]->GetPosition().i == position.i && blackPieces[i]->GetPosition().j == position.j) {
+            delete blackPieces[i];
+            blackPieces.erase(blackPieces.begin() + i);
+            return;
+        }
+    }
+}
+
+void Board::Clear() {
+    for (auto& whitePiece : whitePieces) {
+        delete whitePiece;
+    }
+
+    for (auto& blackPiece : blackPieces) {
+        delete blackPiece;
+    }
+
+    whitePieces.clear();
+    blackPieces.clear();
+}
+
+std::vector<Piece*> Board::GetPiecesByColor(PIECE_COLOR color) const {
+    if (color == PIECE_COLOR::C_WHITE) {
+        return whitePieces;
+    } else {
+        return blackPieces;
+    }
+}
+
+Piece* Board::GetLastMovedPiece() const {
+    return At(lastMovedPiecePosition);
+}
+
+bool Board::IsPositionWithinBoundaries(const Position &position) const {
+    return position.j >= 0 && position.j < 8 && position.i >= 0 && position.i < 8;
+}
+
+void Board::DoMove(Piece* piece, const Move& move) {
+    // Delete piece, if attack or en passant.
+    if (move.type == MOVE_TYPE::ATTACK || move.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
+        Destroy(move.position);
+    } else if (move.type == MOVE_TYPE::EN_PASSANT) {
+        Destroy({piece->GetPosition().i, move.position.j});
+    }
+
+    // Move piece. In case of castling, also move rook.
+    if (move.type == MOVE_TYPE::SHORT_CASTLING) {
+        DoShortCastling(piece, move);
+    } else if (move.type == MOVE_TYPE::LONG_CASTLING) {
+        DoLongCastling(piece, move);
+    } else {
+        // Swap positions.
+        piece->DoMove(move);
+    }
+
+    lastMovedPiecePosition = piece->GetPosition();
+}
+
+void Board::DoShortCastling(Piece* selectedPiece, const Move& move) {
+    Piece* rook = At({selectedPiece->GetPosition().i, 7});
+
+    selectedPiece->DoMove(move);
+    rook->DoMove({MOVE_TYPE::WALK, rook->GetPosition().i, rook->GetPosition().j - 2});
+}
+
+void Board::DoLongCastling(Piece* selectedPiece, const Move& move) {
+    Piece* rook = At({selectedPiece->GetPosition().i, 0});
+
+    selectedPiece->DoMove(move);
+    rook->DoMove({MOVE_TYPE::WALK, rook->GetPosition().i, rook->GetPosition().j + 3});
+}
+
+bool Board::MoveLeadsToCheck(Piece* piece, const Move& move) {
+    // Copy current board and current selected piece.
+    Board boardCopy = *this;
+    Piece* pieceInCopiedBoard = boardCopy.At(piece->GetPosition());
+
+    // Perform the move.
+    boardCopy.DoMove(pieceInCopiedBoard, move);
+
+    return boardCopy.IsInCheck(piece->color);
+}
+
+bool Board::IsInCheck(PIECE_COLOR color) {
+    std::vector<Piece*> enemyPieces = GetPiecesByColor(Piece::GetInverseColor(color));
+
+    for (Piece* piece : enemyPieces) {
+        for (const Move& move : piece->GetPossibleMoves(*this)) {
+            Piece* pieceAtMovePosition = At(move.position);
+
+            bool movePositionContainsMyKing = pieceAtMovePosition &&
+                                              pieceAtMovePosition->color == color &&
+                                              pieceAtMovePosition->type == PIECE_TYPE::KING;
+
+            bool moveIsAttack = move.type == MOVE_TYPE::ATTACK || move.type == MOVE_TYPE::ATTACK_AND_PROMOTION;
+
+            // If the enemy piece is attacking my king, the king is in check.
+            if (movePositionContainsMyKing && moveIsAttack) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Board.h 
+#ifndef RAY_CHESS_BOARD_H
+#define RAY_CHESS_BOARD_H
+
+class Board;  // Forward declaration (circular dependency).
+
+#include "pieces/Piece.h"
+#include "pieces/PieceEnums.h"
+#include "Move.h"
+#include "raylib.h"
+
+#include <map>
+#include <string>
+#include <vector>
+
+class Board {
+public:
+    Board() = default;
+    Board(const Board& other);
+    ~Board();
+
+    void Init();
+    Piece* At(const Position& position) const;
+    void Add(Piece* piece);
+    void Destroy(const Position &position);
+    void Clear();
+
+    bool IsPositionWithinBoundaries(const Position& position) const;
+    std::vector<Piece*> GetPiecesByColor(PIECE_COLOR color) const;
+    Piece* GetLastMovedPiece() const;
+
+    void DoMove(Piece* piece, const Move& move);
+    bool MoveLeadsToCheck(Piece* piece, const Move& move);
+    bool IsInCheck(PIECE_COLOR color);
+
+private:
+    void DoShortCastling(Piece* selectedPiece, const Move& move);
+    void DoLongCastling(Piece* selectedPiece, const Move& move);
+
+    std::vector<Piece*> whitePieces;
+    std::vector<Piece*> blackPieces;
+
+    Position lastMovedPiecePosition;
+};
+
+#endif //RAY_CHESS_BOARD_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Game.cpp 
+#include "Game.h"
+#include "Position.h"
+#include "raylib.h"
+#include "Renderer.h"
+#include "pieces/Queen.h"
+#include "pieces/Knight.h"
+#include "pieces/Bishop.h"
+#include "pieces/Rook.h"
+
+#include <filesystem>
+#include <iostream>
+
+const std::string Game::ASSETS_PATH = "../art";
+const std::string Game::TEXTURES_PATH = Game::ASSETS_PATH;
+const std::string Game::SOUNDS_PATH = Game::ASSETS_PATH + "/sounds";
+
+const Color Game::LIGHT_SHADE = Color{240, 217, 181, 255};
+const Color Game::DARK_SHADE = Color{181, 136, 99, 255};
+
+Game::Game() {
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "RayChess");
+    InitAudioDevice();
+
+    SetTargetFPS(60);
+
+    LoadTextures();
+    LoadSounds();
+
+    // Init the board and calculate the initial movements for the white player.
+    board.Init();
+    CalculateAllPossibleMovements();
+}
+
+void Game::LoadTextures() {
+    for (const auto & entry : std::filesystem::directory_iterator(TEXTURES_PATH)) {
+        // Load and resize image.
+        Image image = LoadImage(entry.path().string().c_str());
+        ImageResize(&image, CELL_SIZE, CELL_SIZE);
+
+        Texture texture = LoadTextureFromImage(image);
+
+        // Add texture to map of textures.
+        std::string fileName = entry.path().filename().string();
+        size_t dotIndex = fileName.find('.');
+
+        std::string fileNameWithoutExtension = entry.path().filename().string().substr(0, dotIndex);
+        textures[fileNameWithoutExtension] = texture;
+
+        // Free image data.
+        UnloadImage(image);
+    }
+}
+
+void Game::LoadSounds() {
+    for (const auto & entry : std::filesystem::directory_iterator(SOUNDS_PATH)) {
+        // Load sound.
+        Sound sound = LoadSound(entry.path().string().c_str());
+
+        // Add sound to map of sounds.
+        std::string fileName = entry.path().filename().string();
+        size_t dotIndex = fileName.find('.');
+
+        std::string fileNameWithoutExtension = entry.path().filename().string().substr(0, dotIndex);
+        sounds[fileNameWithoutExtension] = sound;
+    }
+}
+
+Game::~Game() {
+    // Free textures.
+    for (auto const& kv : textures) {
+        UnloadTexture(kv.second);
+    }
+
+    // Free sounds.
+    for (auto const& kv : sounds) {
+        UnloadSound(kv.second);
+    }
+
+    board.Clear();
+
+    CloseAudioDevice();
+    CloseWindow();
+}
+
+void Game::Run() {
+    while (!WindowShouldClose()){
+        // Input.
+        if (state == GAME_STATE::S_RUNNING) {
+            HandleInput();
+
+            // Getting new time.
+            time += GetFrameTime();
+        }
+
+        if (state == GAME_STATE::S_PROMOTION) {
+            HandleInputPromotion();
+        }
+
+        // Render.
+        BeginDrawing();
+        {
+            std::vector<Move> movesOfSelectedPiece;
+
+            if (selectedPiece) {
+                movesOfSelectedPiece = possibleMovesPerPiece.at(selectedPiece);
+            }
+
+            Renderer::ChangeMouseCursor(board, movesOfSelectedPiece, turn, state == GAME_STATE::S_PROMOTION);
+            Renderer::Clear();
+            Renderer::RenderBackground();
+            Renderer::RenderPieces(board, textures);
+
+            if (state != GAME_STATE::S_PROMOTION) {
+                Renderer::RenderMovesSelectedPiece(textures, movesOfSelectedPiece);
+            }
+
+            Renderer::RenderGuideText();
+            Renderer::RenderInfoBar(round, time);
+
+            // Render promotion screen.
+            if (state == GAME_STATE::S_PROMOTION) {
+                Renderer::RenderPromotionScreen(textures, selectedPiece->color);
+            }
+
+            // Render end-game screen.
+            if (state == GAME_STATE::S_WHITE_WINS || state == GAME_STATE::S_BLACK_WINS) {
+                Renderer::RenderEndScreen(state);
+            }
+        }
+        EndDrawing();
+    }
+}
+
+void Game::HandleInput() {
+    if (IsMouseButtonPressed(0)) {
+        Vector2 mousePosition = GetMousePosition();
+        mousePosition.y -= Game::INFO_BAR_HEIGHT;
+
+        Position clickedPosition = {int(mousePosition.y) / CELL_SIZE, int(mousePosition.x) / CELL_SIZE};
+        Piece* clickedPiece = board.At(clickedPosition);
+
+        // Select piece.
+        if (clickedPiece != nullptr && clickedPiece->color == turn) {
+            PlaySound(sounds["click"]);
+            selectedPiece = clickedPiece;
+        } else {
+            // Do movement.
+            Move* desiredMove = GetMoveAtPosition(clickedPosition);
+
+            if (desiredMove && selectedPiece != nullptr) {
+                DoMoveOnBoard(*desiredMove);
+            } else {
+                PlaySound(sounds["clickCancel"]);
+            }
+
+            // Piece must still be selected to render promotion screen.
+            if (!desiredMove ||
+               (desiredMove->type != MOVE_TYPE::PROMOTION &&
+                desiredMove->type != MOVE_TYPE::ATTACK_AND_PROMOTION)
+            ) {
+                selectedPiece = nullptr;
+            }
+        }
+    }
+}
+
+void Game::HandleInputPromotion() {
+    if (IsMouseButtonPressed(0)) {
+        Vector2 mousePosition = GetMousePosition();
+        mousePosition.y -= Game::INFO_BAR_HEIGHT;
+
+        Position clickedPosition = {int(mousePosition.y) / CELL_SIZE, int(mousePosition.x) / CELL_SIZE};
+
+        if (clickedPosition.i == 3 && clickedPosition.j >= 2 && clickedPosition.j <= 5) {
+            Piece* newPiece;
+
+            if (clickedPosition.j == 2) { // Clicked queen.
+                newPiece = new Queen(selectedPiece->GetPosition(), selectedPiece->color);
+            } else if (clickedPosition.j == 3) { // Clicked rook.
+                newPiece = new Rook(selectedPiece->GetPosition(), selectedPiece->color);
+            } else if (clickedPosition.j == 4) { // Clicked bishop.
+                newPiece = new Bishop(selectedPiece->GetPosition(), selectedPiece->color);
+            } else { // Clicked knight.
+                newPiece = new Knight(selectedPiece->GetPosition(), selectedPiece->color);
+            }
+
+            // Destroy peon, create new piece at same position.
+            board.Destroy(selectedPiece->GetPosition());
+            board.Add(newPiece);
+
+            // Quit promotion, deselect peon and swap turns.
+            state = GAME_STATE::S_RUNNING;
+
+            selectedPiece = nullptr;
+            possibleMovesPerPiece.clear();
+
+            SwapTurns();
+        }
+    }
+}
+
+Move* Game::GetMoveAtPosition(const Position& position) {
+    for (auto& [piece, moves] : possibleMovesPerPiece) {
+        if (piece == selectedPiece) {
+            for (Move& move : moves) {
+                if (move.position.i == position.i && move.position.j == position.j) {
+                    return &move;
+                }
+            }
+        }
+    }
+    
+    return nullptr;
+}
+
+void Game::DoMoveOnBoard(const Move& move) {
+    board.DoMove(selectedPiece, move);
+
+    // If the move was a promotion move, show the promotion screen. Else, swap turns.
+    if (move.type == MOVE_TYPE::PROMOTION || move.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
+        state = GAME_STATE::S_PROMOTION;
+    } else {
+        SwapTurns();
+    }
+}
+
+void Game::SwapTurns() {
+    turn = Piece::GetInverseColor(turn);
+
+    // Advance round.
+    if (turn == PIECE_COLOR::C_WHITE) {
+        round++;
+    }
+
+    // Calculate all possible movements for the current pieces.
+    CalculateAllPossibleMovements();
+
+    // Check for stalemates or checkmates. If so, ends the game.
+    CheckForEndOfGame();
+}
+
+void Game::CalculateAllPossibleMovements() {
+    possibleMovesPerPiece.clear();
+
+    for (Piece* piece : board.GetPiecesByColor(turn)) {
+        possibleMovesPerPiece[piece] = piece->GetPossibleMoves(board);
+    }
+
+    // Remove the moves that could destroy the opponent's king.
+    FilterMovesThatAttackOppositeKing();
+
+    // Remove the moves that cause the player to get in check.
+    FilterMovesThatLeadToCheck();
+}
+
+void Game::CheckForEndOfGame() {
+    std::vector<Piece*> piecesOfCurrentTurn = board.GetPiecesByColor(turn);
+
+    if (board.IsInCheck(turn)) {
+        // If there are no moves possible and in check, declare checkmate.
+        if (!IsAnyMovePossible()) {
+            state = (turn == PIECE_COLOR::C_WHITE ? GAME_STATE::S_BLACK_WINS : GAME_STATE::S_WHITE_WINS);
+        }
+    } else if (!IsAnyMovePossible()) {
+        // If not in check and there is not any move possible, declare stalemate.
+        state = GAME_STATE::S_STALEMATE;
+    }
+}
+
+void Game::FilterMovesThatAttackOppositeKing() {
+    for (auto& [piece, possibleMoves] : possibleMovesPerPiece) {
+        for (int i = possibleMoves.size() - 1; i >= 0; i--) {
+            Move& move = possibleMoves[i];
+
+            // Remove moves that attack the opponent's king.
+            bool isAttackMove = move.type == MOVE_TYPE::ATTACK || move.type == MOVE_TYPE::ATTACK_AND_PROMOTION;
+
+            if (isAttackMove) {
+                Piece* attackedPiece = board.At(move.position);
+
+                if (attackedPiece->type == PIECE_TYPE::KING && attackedPiece->color != turn) {
+                    possibleMoves.erase(possibleMoves.begin() + i);
+                }
+            }
+        }
+    }
+}
+
+void Game::FilterMovesThatLeadToCheck() {
+    for (auto& [piece, possibleMoves] : possibleMovesPerPiece) {
+        for (int i = possibleMoves.size() - 1; i >= 0; i--) {
+            Move& move = possibleMoves[i];
+
+            // If short castling or long castling, check for intermediary positions between king and rook.
+            if (move.type == MOVE_TYPE::SHORT_CASTLING || move.type == MOVE_TYPE::LONG_CASTLING) {
+                std::vector<Position> intermediaryPositions;
+
+                if (move.type == MOVE_TYPE::SHORT_CASTLING) {
+                    intermediaryPositions = {{piece->GetPosition().i, 5}, {piece->GetPosition().i, 6}};
+                } else {
+                    intermediaryPositions = {{piece->GetPosition().i, 3}, {piece->GetPosition().i, 2}};
+                }
+
+                for (const Position& position : intermediaryPositions) {
+                    if (board.MoveLeadsToCheck(piece, {MOVE_TYPE::WALK, position})) {
+                        possibleMoves.erase(possibleMoves.begin() + i);
+                        break;
+                    }
+                }
+
+            // If normal move.
+            } else if (board.MoveLeadsToCheck(piece, possibleMoves[i])) {
+                possibleMoves.erase(possibleMoves.begin() + i);
+            }
+        }
+    }
+}
+
+bool Game::IsAnyMovePossible() {
+    for (const auto& [pieceName, possibleMoves] : possibleMovesPerPiece) {
+        if (!possibleMoves.empty()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Game.h 
+#ifndef RAY_CHESS_GAME_H
+#define RAY_CHESS_GAME_H
+
+#include <string>
+#include <map>
+
+#include "pieces/Piece.h"
+#include "Board.h"
+#include "raylib.h"
+#include "Move.h"
+
+enum GAME_STATE {
+    S_RUNNING,
+    S_PROMOTION,
+    S_WHITE_WINS,
+    S_BLACK_WINS,
+    S_STALEMATE
+};
+
+class Game {
+public:
+    const static int INFO_BAR_HEIGHT = 32;
+    const static int WINDOW_WIDTH = 640;
+    const static int WINDOW_HEIGHT = WINDOW_WIDTH + INFO_BAR_HEIGHT;
+    const static int CELL_SIZE = WINDOW_WIDTH / 8;
+
+    const static std::string ASSETS_PATH;
+    const static std::string TEXTURES_PATH;
+    const static std::string SOUNDS_PATH;
+
+    const static Color LIGHT_SHADE;
+    const static Color DARK_SHADE;
+
+    Game();
+    ~Game();
+
+    void Run();
+    void SwapTurns();
+
+private:
+    void LoadTextures();
+    void LoadSounds();
+
+    void HandleInput();
+    void HandleInputPromotion();
+    Move* GetMoveAtPosition(const Position& position);
+    void DoMoveOnBoard(const Move& move);
+
+    void CalculateAllPossibleMovements();
+    void CheckForEndOfGame();
+    void FilterMovesThatAttackOppositeKing();
+    void FilterMovesThatLeadToCheck();
+    bool IsAnyMovePossible();
+
+    // Assets.
+    std::map<std::string, Texture> textures;
+    std::map<std::string, Sound> sounds;
+
+    // Game state.
+    Board board;
+    PIECE_COLOR turn = PIECE_COLOR::C_WHITE;
+    GAME_STATE state = GAME_STATE::S_RUNNING;
+
+    // Selected piece/possible moves state.
+    Piece* selectedPiece = nullptr;
+    std::map<Piece*, std::vector<Move>> possibleMovesPerPiece;
+
+    // Game information (current round and time).
+    int round = 1;
+    double time = 0;
+};
+
+#endif //RAY_CHESS_GAME_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Main.cpp 
+#include "Game.h"
+
+int main() {
+    Game().Run();
+
+    return 0;
+} 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Move.h 
+#ifndef RAY_CHESS_MOVE_H
+#define RAY_CHESS_MOVE_H
+
+#include "Position.h"
+
+enum MOVE_TYPE {
+    WALK,
+    DOUBLE_WALK,
+    ATTACK,
+    SHORT_CASTLING,
+    LONG_CASTLING,
+    EN_PASSANT,
+    PROMOTION,
+    ATTACK_AND_PROMOTION,
+};
+
+struct Move {
+    MOVE_TYPE type;
+    Position position;
+};
+
+#endif //RAY_CHESS_MOVE_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\output.txt 
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Position.h 
+#ifndef RAY_CHESS_POSITION_H
+#define RAY_CHESS_POSITION_H
+
+struct Position {
+    int i, j;
+};
+
+#endif //RAY_CHESS_POSITION_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Renderer.cpp 
+#include <algorithm>
+#include "Renderer.h"
+#include "Game.h"
+
+void Renderer::Clear() {
+    ClearBackground(WHITE);
+}
+
+void Renderer::RenderBackground() {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            int x = j * Game::CELL_SIZE;
+            int y = i * Game::CELL_SIZE + Game::INFO_BAR_HEIGHT;
+
+            Color cellColor = GetShadeColor(GetColorOfCell({i, j}));
+            DrawRectangle(x, y, Game::CELL_SIZE, Game::CELL_SIZE, cellColor);
+        }
+    }
+}
+
+void Renderer::RenderPieces(const Board& board, const std::map<std::string, Texture>& textures) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            Piece* piece = board.At({i, j});
+
+            if (piece != nullptr) {
+                int x = j * Game::CELL_SIZE;
+                int y = i * Game::CELL_SIZE + Game::INFO_BAR_HEIGHT;
+
+                DrawTexture(textures.at(piece->GetName()), x, y, WHITE);
+            }
+        }
+    }
+}
+
+void Renderer::RenderMovesSelectedPiece(const std::map<std::string, Texture>& textures, const std::vector<Move>& possibleMoves) {
+    for (const Move& move : possibleMoves) {
+        DrawTexture(
+            textures.at(GetTextureNameFromMoveType(move.type)),
+            move.position.j * Game::CELL_SIZE,
+            move.position.i * Game::CELL_SIZE + Game::INFO_BAR_HEIGHT,
+            WHITE
+        );
+    }
+}
+
+void Renderer::RenderGuideText() {
+    int padding = 3;
+    int characterSize = 10;
+
+    // Render 1-8 numbers (rows).
+    for (int i = 0; i < 8; i++) {
+        Color textColor = GetShadeColor(Piece::GetInverseColor(GetColorOfCell({i, 0})));
+
+        // Render text.
+        int x = padding;
+        int y = i * Game::CELL_SIZE + padding + Game::INFO_BAR_HEIGHT;
+
+        char text[2];
+        text[0] = 49 + i;
+        text[1] = 0;
+
+        DrawText(text, x, y, 20, textColor);
+    }
+
+    // Render h-a characters (columns).
+    for (int j = 0; j < 8; j++) {
+        Color textColor = GetShadeColor(Piece::GetInverseColor(GetColorOfCell({7, j})));
+
+        // Render text.
+        int x = (j + 1) * Game::CELL_SIZE - characterSize - padding;
+        int y = Game::WINDOW_HEIGHT - characterSize * 1.75 - padding;
+
+        char text[2];
+        text[0] = 97 + (7 - j);
+        text[1] = 0;
+
+        DrawText(text, x, y, 20, textColor);
+    }
+}
+
+void Renderer::RenderPromotionScreen(const std::map<std::string, Texture>& textures, PIECE_COLOR colorOfPeon) {
+    DrawRectangle(0, 0, Game::WINDOW_WIDTH, Game::WINDOW_HEIGHT, Color{0, 0, 0, 127});
+    DrawText("Promotion", Game::WINDOW_WIDTH / 2 - 98, Game::WINDOW_HEIGHT / 4, 40, WHITE);
+
+    std::string prefix = colorOfPeon == PIECE_COLOR::C_WHITE ? "w" : "b";
+
+    int textureY = Game::CELL_SIZE * 3 + Game::INFO_BAR_HEIGHT;
+    int textY = Game::CELL_SIZE * 4 + 5 + Game::INFO_BAR_HEIGHT;
+
+    // Draw queen.
+    {
+        DrawTexture(textures.at(prefix + "q"), Game::CELL_SIZE * 2, textureY, WHITE);
+        DrawText("Queen", Game::CELL_SIZE * 2 + 9, textY, 20, WHITE);
+    }
+
+    // Draw rook.
+    {
+        DrawTexture(textures.at(prefix + "r"), Game::CELL_SIZE * 3, textureY, WHITE);
+        DrawText("Rook", Game::CELL_SIZE * 3 + 14, textY, 20, WHITE);
+    }
+
+    // Draw bishop.
+    {
+        DrawTexture(textures.at(prefix + "b"), Game::CELL_SIZE * 4, textureY, WHITE);
+        DrawText("Bishop", Game::CELL_SIZE * 4 + 7, textY, 20, WHITE);
+    }
+
+    // Draw knight.
+    {
+        DrawTexture(textures.at(prefix + "n"), Game::CELL_SIZE * 5, textureY, WHITE);
+        DrawText("Knight", Game::CELL_SIZE * 5 + 9, textY, 20, WHITE);
+    }
+}
+
+void Renderer::RenderInfoBar(int round, double time) {
+    DrawRectangle(0, 0, Game::WINDOW_WIDTH, Game::INFO_BAR_HEIGHT, BLACK);
+
+    std::string roundText = "Round: " + std::to_string(round);
+    std::string timeText = "Time: " + std::to_string((int) time) + "s";
+
+    int timeTextWidth = MeasureText(timeText.c_str(), 20);
+    int padding = 5;
+
+    DrawText(roundText.c_str(), padding, Game::INFO_BAR_HEIGHT / 2 - 10, 20, WHITE);
+    DrawText(timeText.c_str(), Game::WINDOW_WIDTH - timeTextWidth - padding, Game::INFO_BAR_HEIGHT / 2 - 10, 20, WHITE);
+}
+
+void Renderer::RenderEndScreen(GAME_STATE state) {
+    DrawRectangle(0, 0, Game::WINDOW_WIDTH, Game::WINDOW_HEIGHT, Color{0, 0, 0, 127});
+
+    const char* text;
+
+    if (state == GAME_STATE::S_WHITE_WINS) {
+        text = "White wins";
+    } else if (state == GAME_STATE::S_BLACK_WINS) {
+        text = "Black wins";
+    } else if (state == GAME_STATE::S_STALEMATE) {
+        text = "Stalemate";
+    }
+
+    int textLength = MeasureText(text, 40);
+    DrawText(text, Game::WINDOW_WIDTH / 2 - textLength / 2, Game::WINDOW_HEIGHT / 2, 40, WHITE);
+}
+
+void Renderer::ChangeMouseCursor(const Board& board, const std::vector<Move>& possibleMoves, PIECE_COLOR turn, bool inPromotion) {
+    Vector2 mousePosition = GetMousePosition();
+    mousePosition.y -= Game::INFO_BAR_HEIGHT;
+
+    Position hoverPosition = {int(mousePosition.y) / Game::CELL_SIZE, int(mousePosition.x) / Game::CELL_SIZE};
+
+    if (!inPromotion) {
+        bool isHoveringOverPiece = board.At(hoverPosition) && board.At(hoverPosition)->color == turn;
+        auto it = std::find_if(possibleMoves.begin(), possibleMoves.end(), [hoverPosition](const Move& m) {
+            return m.position.i == hoverPosition.i && m.position.j == hoverPosition.j;
+        });
+
+        bool isHoveringOverMove = it != possibleMoves.end();
+
+        // Set mouse to pointer if hovering over piece or hovering over move.
+        if (isHoveringOverPiece || isHoveringOverMove) {
+            SetMouseCursor(4);
+        } else {
+            SetMouseCursor(0);
+        }
+    } else {
+        // If in promotion screen, also set mouse to pointer if hovering over the options.
+        if (hoverPosition.i == 3 && hoverPosition.j >= 2 && hoverPosition.j <= 5) {
+            SetMouseCursor(4);
+        }
+    }
+}
+
+std::string Renderer::GetTextureNameFromMoveType(MOVE_TYPE moveType) {
+    switch (moveType) {
+        case MOVE_TYPE::WALK:
+        case MOVE_TYPE::DOUBLE_WALK:
+        case MOVE_TYPE::ATTACK:
+            return "move";
+
+        case MOVE_TYPE::SHORT_CASTLING:
+        case MOVE_TYPE::LONG_CASTLING:
+            return "castling";
+
+        case MOVE_TYPE::EN_PASSANT:
+            return "enpassant";
+
+        case MOVE_TYPE::PROMOTION:
+        case MOVE_TYPE::ATTACK_AND_PROMOTION:
+            return "promotion";
+    }
+}
+
+Color Renderer::GetShadeColor(PIECE_COLOR color) {
+    return color == PIECE_COLOR::C_WHITE ? Game::LIGHT_SHADE : Game::DARK_SHADE;
+}
+
+PIECE_COLOR Renderer::GetColorOfCell(const Position& cellPosition) {
+    int startingColorInRow = cellPosition.i % 2 == 0 ? 0 : 1;
+    int colorIndex = (startingColorInRow + cellPosition.j) % 2;
+
+    return colorIndex == 0 ? PIECE_COLOR::C_WHITE : PIECE_COLOR::C_BLACK;
+}
+
+
+
+
+
+
+
+
+
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Renderer.h 
+#ifndef RAY_CHESS_RENDERER_H
+#define RAY_CHESS_RENDERER_H
+
+#include "raylib.h"
+#include "pieces/Piece.h"
+#include "Game.h"
+
+class Renderer {
+public:
+    static void Clear();
+    static void RenderBackground();
+    static void RenderPieces(const Board& board, const std::map<std::string, Texture>& textures);
+    static void RenderMovesSelectedPiece(const std::map<std::string, Texture>& textures, const std::vector<Move>& possibleMoves);
+    static void RenderGuideText();
+    static void RenderPromotionScreen(const std::map<std::string, Texture>& textures, PIECE_COLOR colorOfPeonBeingPromoted);
+    static void RenderInfoBar(int round, double time);
+    static void RenderEndScreen(GAME_STATE state);
+    static void ChangeMouseCursor(const Board& board, const std::vector<Move>& possibleMoves, PIECE_COLOR turn, bool inPromotion);
+
+private:
+    static std::string GetTextureNameFromMoveType(MOVE_TYPE moveType);
+    static Color GetShadeColor(PIECE_COLOR color);
+    static PIECE_COLOR GetColorOfCell(const Position& cellPosition);
+};
+
+#endif //RAY_CHESS_RENDERER_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\txtgen.bat 
+@echo off
+echo Displaying file contents in the current directory and subdirectories... > output.txt
+for /r %%f in (*) do (
+    echo Displaying contents of %%f >> output.txt
+    cat "%%f" >> output.txt
+    echo. >> output.txt
+)
+echo Done. Output saved to output.txt.
+pause
+@echo off
+echo Displaying file contents in the current directory and subdirectories... > output.txt
+for /r %%f in (*) do (
+    echo Displaying contents of %%f >> output.txt
+    cat "%%f" >> output.txt
+    echo. >> output.txt
+)
+echo Done. Output saved to output.txt.
+pause
+
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Bishop.cpp 
+#include "Bishop.h"
+
+std::vector<Move> Bishop::GetPossibleMoves(const Board& board) {
+    std::vector<Move> moves;
+
+    // Checking up-left.
+    AddValidMoves(board, moves, {position.i - 1, position.j - 1}, -1, -1);
+
+    // Checking up-right.
+    AddValidMoves(board, moves, {position.i - 1, position.j + 1}, -1, 1);
+
+    // Checking down-right.
+    AddValidMoves(board, moves, {position.i + 1, position.j + 1}, 1, 1);
+
+    // Checking down-left.
+    AddValidMoves(board, moves, {position.i + 1, position.j - 1}, 1, -1);
+
+    return moves;
+}
+
+void Bishop::AddValidMoves(const Board& board, std::vector<Move>& moves, Position pos, int iIncrement, int jIncrement) {
+    while (board.IsPositionWithinBoundaries(pos)) {
+        if (!board.At(pos)) {
+            moves.push_back({MOVE_TYPE::WALK, pos});
+
+            pos.i += iIncrement;
+            pos.j += jIncrement;
+        } else if (board.At(pos) && board.At(pos)->color != color) {
+            moves.push_back({MOVE_TYPE::ATTACK, pos});
+            break;
+        } else {
+            break;
+        }
+    }
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Bishop.h 
+#ifndef RAY_CHESS_BISHOP_H
+#define RAY_CHESS_BISHOP_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class Bishop : public Piece {
+public:
+    Bishop(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::BISHOP) {}
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+
+private:
+    void AddValidMoves(const Board& board, std::vector<Move>& moves, Position move, int iIncrement, int jIncrement);
+};
+
+#endif //RAY_CHESS_BISHOP_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\King.cpp 
+#include "King.h"
+
+std::vector<Move> King::GetPossibleMoves(const Board &board) {
+    std::vector<Position> possiblePositions = {
+            // Up.
+            {position.i - 1, position.j},
+            // Down.
+            {position.i + 1, position.j},
+            // Right.
+            {position.i, position.j + 1},
+            // Left.
+            {position.i, position.j - 1},
+            // Up-left.
+            {position.i - 1, position.j - 1},
+            // Up-right.
+            {position.i - 1, position.j + 1},
+            // Down-left.
+            {position.i + 1, position.j - 1},
+            // Down-right.
+            {position.i + 1, position.j + 1},
+    };
+
+    std::vector<Move> possibleMoves;
+
+    for (const Position& position : possiblePositions) {
+        if (board.IsPositionWithinBoundaries(position)) {
+            if (!board.At(position)) {
+                possibleMoves.push_back({MOVE_TYPE::WALK, position});
+            } else if (board.At(position) && board.At(position)->color != color) {
+                possibleMoves.push_back({MOVE_TYPE::ATTACK, position});
+            }
+        }
+    }
+
+    // Check for long castling (left rook).
+    if (CheckCastling(board, {position.i, 0}, {{position.i, 1}, {position.i, 2}, {position.i, 3}})) {
+        possibleMoves.push_back({MOVE_TYPE::LONG_CASTLING, {position.i, 2}});
+    }
+
+    // Check for short castling (right rook).
+    if (CheckCastling(board, {position.i, 7}, {{position.i, 5}, {position.i, 6}})) {
+        possibleMoves.push_back({MOVE_TYPE::SHORT_CASTLING, {position.i, 6}});
+    }
+
+    // Remove all moves that go out of the board.
+    for (int i = possibleMoves.size() - 1; i >= 0; i--) {
+        if (!board.IsPositionWithinBoundaries(possibleMoves[i].position)) {
+            possibleMoves.erase(possibleMoves.begin() + i);
+        }
+    }
+
+    return possibleMoves;
+}
+
+bool King::CheckCastling(const Board &board, const Position& rookPosition, const std::vector<Position>& intermediatePositions) {
+    Piece* piece = board.At(rookPosition);
+
+    if (!piece || piece->color != color || piece->type != PIECE_TYPE::ROOK || piece->HasMoved() || hasMoved) {
+        return false;
+    }
+
+    // Check positions between the king and the right rook.
+    for (const Position& position : intermediatePositions) {
+        if (board.At(position)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\King.h 
+#ifndef RAY_CHESS_KING_H
+#define RAY_CHESS_KING_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class King : public Piece {
+public:
+    King(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::KING) {}
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+
+private:
+    bool CheckCastling(const Board &board, const Position& rookPosition, const std::vector<Position>& intermediatePositions);
+};
+
+#endif //RAY_CHESS_KING_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Knight.cpp 
+#include "Knight.h"
+
+std::vector<Move> Knight::GetPossibleMoves(const Board &board) {
+    std::vector<Position> possiblePositions = {
+        // Up.
+        {position.i - 2, position.j - 1},
+        {position.i - 2, position.j + 1},
+
+        // Right.
+        {position.i - 1, position.j + 2},
+        {position.i + 1, position.j + 2},
+
+        // Down.
+        {position.i + 2, position.j - 1},
+        {position.i + 2, position.j + 1},
+
+        // Left.
+        {position.i - 1, position.j - 2},
+        {position.i + 1, position.j - 2},
+    };
+
+    std::vector<Move> possibleMoves;
+
+    for (const Position& position : possiblePositions) {
+        if (board.IsPositionWithinBoundaries(position)) {
+            if (!board.At(position)) {
+                possibleMoves.push_back({MOVE_TYPE::WALK, position});
+            } else if (board.At(position)->color != color) {
+                possibleMoves.push_back({MOVE_TYPE::ATTACK, position});
+            }
+        }
+    }
+
+    return possibleMoves;
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Knight.h 
+#ifndef RAY_CHESS_KNIGHT_H
+#define RAY_CHESS_KNIGHT_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class Knight : public Piece {
+public:
+    Knight(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::KNIGHT) {}
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+};
+
+#endif //RAY_CHESS_KNIGHT_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Peon.cpp 
+#include "Peon.h"
+
+void Peon::DoMove(const Move &move) {
+    if (move.type == MOVE_TYPE::DOUBLE_WALK) {
+        hasOnlyMadeDoubleWalk = true;
+    } else {
+        hasOnlyMadeDoubleWalk = false;
+    };
+
+    Piece::DoMove(move);
+}
+
+std::vector<Move> Peon::GetPossibleMoves(const Board& board) {
+    std::vector<Move> moves;
+
+    // If black, can only move down. Else, can only move up.
+    Position walk = {position.i + (color == PIECE_COLOR::C_BLACK ? +1 : -1), position.j};
+
+    if (!board.At(walk)) {
+        moves.push_back({MOVE_TYPE::WALK, walk});
+    }
+
+    // Check for moving two cells, if the peon has not been moved.
+    Position twoCellWalk = {position.i + (color == PIECE_COLOR::C_BLACK ? +2 : -2), position.j};
+
+    if (!board.At(twoCellWalk) && !this->hasMoved) {
+        moves.push_back({MOVE_TYPE::DOUBLE_WALK, twoCellWalk});
+    }
+
+    // Check for attacks (diagonals).
+    int attackRow = position.i + (color == PIECE_COLOR::C_WHITE ? -1 : 1);
+
+    Position attackLeft = {attackRow, position.j - 1};
+    Position attackRight = {attackRow, position.j + 1};
+
+    if (board.At(attackLeft) && board.At(attackLeft)->color != color) {
+        moves.push_back({MOVE_TYPE::ATTACK, attackLeft});
+    }
+
+    if (board.At(attackRight) && board.At(attackRight)->color != color) {
+        moves.push_back({MOVE_TYPE::ATTACK, attackRight});
+    }
+
+    // Check for en passant (left).
+    Position enPassantAttackLeft = {attackRow, position.j - 1};
+
+    if (CheckEnPassant(board, {position.i, position.j - 1}, enPassantAttackLeft)) {
+        moves.push_back({MOVE_TYPE::EN_PASSANT, enPassantAttackLeft});
+    }
+
+    // Check for en passant (right).
+    Position enPassantAttackRight = {attackRow, position.j + 1};
+
+    if (CheckEnPassant(board, {position.i, position.j + 1}, enPassantAttackRight)) {
+        moves.push_back({MOVE_TYPE::EN_PASSANT, enPassantAttackRight});
+    }
+
+    // Check for promotion.
+    for (Move& move : moves) {
+        // Check for promotion if on first row and white, or last row and black.
+        if (IsPromotionPosition(move.position)) {
+            if (move.type == MOVE_TYPE::ATTACK) {
+                move.type = MOVE_TYPE::ATTACK_AND_PROMOTION;
+            } else if (move.type == MOVE_TYPE::WALK) {
+                move.type = MOVE_TYPE::PROMOTION;
+            }
+        }
+    }
+
+    return moves;
+}
+
+bool Peon::IsPromotionPosition(const Position& position) {
+    return (position.i == 0 && color == PIECE_COLOR::C_WHITE) ||
+           (position.i == 7 && color == PIECE_COLOR::C_BLACK);
+}
+
+bool Peon::CheckEnPassant(const Board& board, const Position& piecePosition, const Position& attackPosition) {
+    Piece* piece = board.At(piecePosition);
+
+    if (!board.At(attackPosition) &&
+        piece &&
+        piece->color != color &&
+        piece->type == PIECE_TYPE::PEON
+        ) {
+        Peon* peon = (Peon*) piece;
+
+        if (peon->hasOnlyMadeDoubleWalk && peon == board.GetLastMovedPiece()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Peon.h 
+#ifndef RAY_CHESS_PEON_H
+#define RAY_CHESS_PEON_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class Peon : public Piece {
+public:
+    Peon(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::PEON) {}
+
+    void DoMove(const Move& move) override;
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+
+    bool hasOnlyMadeDoubleWalk = false;
+
+private:
+    bool IsPromotionPosition(const Position& position);
+    bool CheckEnPassant(const Board& board, const Position& piecePosition, const Position& attackPosition);
+};
+
+#endif //RAY_CHESS_PEON_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Piece.cpp 
+#include "Piece.h"
+#include "Peon.h"
+#include "Rook.h"
+#include "Knight.h"
+#include "Bishop.h"
+#include "Queen.h"
+#include "King.h"
+
+Piece::Piece(Position position, PIECE_COLOR color, PIECE_TYPE type): position(position), color(color), type(type) {
+    std::string colorPrefix = color == PIECE_COLOR::C_WHITE ? "w" : "b";
+    std::string pieceCharacter = GetPieceCharacterByType(type);
+
+    this->name = colorPrefix + pieceCharacter;
+}
+
+void Piece::DoMove(const Move &move) {
+    hasMoved = true;
+    position = move.position;
+}
+
+Position Piece::GetPosition() {
+    return position;
+}
+
+std::string Piece::GetName() {
+    return name;
+}
+
+bool Piece::HasMoved() {
+    return hasMoved;
+}
+
+Piece *Piece::CreatePieceByType(PIECE_TYPE type, const Position& position, PIECE_COLOR color) {
+    switch (type) {
+        case PEON:
+            return new Peon(position, color);
+        case ROOK:
+            return new Rook(position, color);
+        case KNIGHT:
+            return new Knight(position, color);
+        case BISHOP:
+            return new Bishop(position, color);
+        case QUEEN:
+            return new Queen(position, color);
+        case KING:
+            return new King(position, color);
+    }
+}
+
+PIECE_COLOR Piece::GetInverseColor(PIECE_COLOR color) {
+    return color == PIECE_COLOR::C_WHITE ? PIECE_COLOR::C_BLACK : PIECE_COLOR::C_WHITE;
+}
+
+std::string Piece::GetPieceCharacterByType(PIECE_TYPE type) {
+    switch (type) {
+        case PEON:
+            return "p";
+        case ROOK:
+            return "r";
+        case KNIGHT:
+            return "n";
+        case BISHOP:
+            return "b";
+        case QUEEN:
+            return "q";
+        case KING:
+            return "k";
+    }
+}
+
+
+
+
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Piece.h 
+#ifndef RAY_CHESS_PIECE_H
+#define RAY_CHESS_PIECE_H
+
+class Piece; // Forward declaration (circular dependency).
+
+#include "raylib.h"
+#include "../Position.h"
+#include "../Board.h"
+#include "../Move.h"
+#include "PieceEnums.h"
+
+#include <string>
+#include <vector>
+
+class Piece {
+public:
+    Piece(Position position, PIECE_COLOR color, PIECE_TYPE type);
+    virtual ~Piece() = default;
+
+    static Piece* CreatePieceByType(PIECE_TYPE type, const Position& position, PIECE_COLOR color);
+    static PIECE_COLOR GetInverseColor(PIECE_COLOR color);
+    static std::string GetPieceCharacterByType(PIECE_TYPE type);
+
+    virtual void DoMove(const Move& move);
+    virtual std::vector<Move> GetPossibleMoves(const Board& board) = 0;
+
+    Position GetPosition();
+    std::string GetName();
+    bool HasMoved();
+
+    const PIECE_COLOR color;
+    const PIECE_TYPE type;
+
+protected:
+    Position position;
+    bool hasMoved = false;
+
+private:
+    std::string name;
+};
+
+#endif //RAY_CHESS_PIECE_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\PieceEnums.h 
+#ifndef RAY_CHESS_PIECEENUMS_H
+#define RAY_CHESS_PIECEENUMS_H
+
+enum PIECE_TYPE {
+    PEON,
+    ROOK,
+    KNIGHT,
+    BISHOP,
+    QUEEN,
+    KING
+};
+
+enum PIECE_COLOR {
+    C_WHITE,
+    C_BLACK
+};
+
+#endif //RAY_CHESS_PIECEENUMS_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Queen.cpp 
+#include "Queen.h"
+
+std::vector<Move> Queen::GetPossibleMoves(const Board &board) {
+    std::vector<Move> moves;
+
+    // Checking left.
+    AddValidMoves(board, moves, {position.i, position.j - 1}, 0, -1);
+
+    // Checking right.
+    AddValidMoves(board, moves, {position.i, position.j + 1}, 0, 1);
+
+    // Checking up.
+    AddValidMoves(board, moves, {position.i - 1, position.j}, -1, 0);
+
+    // Checking down.
+    AddValidMoves(board, moves, {position.i + 1, position.j}, 1, 0);
+
+    // Checking up-left.
+    AddValidMoves(board, moves, {position.i - 1, position.j - 1}, -1, -1);
+
+    // Checking up-right.
+    AddValidMoves(board, moves, {position.i - 1, position.j + 1}, -1, 1);
+
+    // Checking down-right.
+    AddValidMoves(board, moves, {position.i + 1, position.j + 1}, 1, 1);
+
+    // Checking down-left.
+    AddValidMoves(board, moves, {position.i + 1, position.j - 1}, 1, -1);
+
+    return moves;
+}
+
+void Queen::AddValidMoves(const Board &board, std::vector<Move> &moves, Position pos, int iIncrement, int jIncrement) {
+    while (board.IsPositionWithinBoundaries(pos)) {
+        if (!board.At(pos)) {
+            moves.push_back({MOVE_TYPE::WALK, pos});
+
+            pos.i += iIncrement;
+            pos.j += jIncrement;
+        } else if (board.At(pos) && board.At(pos)->color != color) {
+            moves.push_back({MOVE_TYPE::ATTACK, pos});
+            break;
+        } else {
+            break;
+        }
+    }
+}
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Queen.h 
+#ifndef RAY_CHESS_QUEEN_H
+#define RAY_CHESS_QUEEN_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class Queen : public Piece {
+public:
+    Queen(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::QUEEN) {}
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+
+private:
+    void AddValidMoves(const Board& board, std::vector<Move>& moves, Position pos, int iIncrement, int jIncrement);
+};
+
+#endif //RAY_CHESS_QUEEN_H
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Rook.cpp 
+#include "Rook.h"
+
+std::vector<Move> Rook::GetPossibleMoves(const Board& board) {
+    std::vector<Move> moves;
+
+    // Checking left.
+    AddValidMoves(board, moves, {position.i, position.j - 1}, 0, -1);
+
+    // Checking right.
+    AddValidMoves(board, moves, {position.i, position.j + 1}, 0, 1);
+
+    // Checking up.
+    AddValidMoves(board, moves, {position.i - 1, position.j}, -1, 0);
+
+    // Checking down.
+    AddValidMoves(board, moves, {position.i + 1, position.j}, 1, 0);
+
+    return moves;
+}
+
+void Rook::AddValidMoves(const Board& board, std::vector<Move>& moves, Position pos, int iIncrement, int jIncrement) {
+    while (board.IsPositionWithinBoundaries(pos)) {
+        if (!board.At(pos)) {
+            moves.push_back({MOVE_TYPE::WALK, pos});
+
+            pos.i += iIncrement;
+            pos.j += jIncrement;
+        } else if (board.At(pos) && board.At(pos)->color != color) {
+            moves.push_back({MOVE_TYPE::ATTACK, pos});
+            break;
+        } else {
+            break;
+        }
+    }
+}
+
+
+ 
+Displaying contents of D:\a\AI_project\raylib_chess\src\pieces\Rook.h 
+#ifndef RAY_CHESS_ROOK_H
+#define RAY_CHESS_ROOK_H
+
+#include "Piece.h"
+#include "../Board.h"
+
+class Rook : public Piece {
+public:
+    Rook(Position position, PIECE_COLOR color): Piece(position, color, PIECE_TYPE::ROOK) {}
+    std::vector<Move> GetPossibleMoves(const Board& board) override;
+
+private:
+    void AddValidMoves(const Board& board, std::vector<Move>& moves, Position pos, int iIncrement, int jIncrement);
+};
+
+#endif //RAY_CHESS_ROOK_H
+ 
