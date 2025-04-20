@@ -182,7 +182,7 @@ bool Board::MoveLeadsToCheck(Piece* piece, const Move& move) {
     return boardCopy.IsInCheck(piece->color);
 }
 
-bool Board::IsInCheck(PIECE_COLOR color) {
+bool Board::IsInCheck(PIECE_COLOR color) const { 
     std::vector<Piece*> enemyPieces = GetPiecesByColor(Piece::GetInverseColor(color));
 
     for (Piece* piece : enemyPieces) {

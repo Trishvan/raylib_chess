@@ -1,4 +1,370 @@
 Displaying file contents in the current directory and subdirectories... 
+Displaying contents of D:\a\AI_project\raylib_chess\src\AI.cpp 
+// AI.cpp
+#include "AI.h"
+#include <algorithm>
+#include <limits>
+#include <cstdlib>
+#include <ctime>
+
+AI::AI(PIECE_COLOR aiColor) : aiColor(aiColor) {
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+}
+
+std::pair<Piece*, Move> AI::GetBestMove(Board& board) {
+    std::vector<Piece*> pieces = board.GetPiecesByColor(aiColor);
+    std::pair<Piece*, Move> bestMove = {nullptr, {}};
+    int bestScore = std::numeric_limits<int>::min();
+    
+    // Map to store all possible moves per piece
+    std::map<Piece*, std::vector<Move>> possibleMovesPerPiece;
+    
+    // Calculate all possible moves for all pieces
+    for (Piece* piece : pieces) {
+        std::vector<Move> moves = piece->GetPossibleMoves(board);
+        
+        // Filter moves that lead to check
+        for (int i = moves.size() - 1; i >= 0; i--) {
+            if (board.MoveLeadsToCheck(piece, moves[i])) {
+                moves.erase(moves.begin() + i);
+            }
+        }
+        
+        // Special handling for castling
+        for (int i = moves.size() - 1; i >= 0; i--) {
+            Move& move = moves[i];
+            if (move.type == MOVE_TYPE::SHORT_CASTLING || move.type == MOVE_TYPE::LONG_CASTLING) {
+                std::vector<Position> intermediaryPositions;
+                
+                if (move.type == MOVE_TYPE::SHORT_CASTLING) {
+                    intermediaryPositions = {{piece->GetPosition().i, 5}, {piece->GetPosition().i, 6}};
+                } else {
+                    intermediaryPositions = {{piece->GetPosition().i, 3}, {piece->GetPosition().i, 2}};
+                }
+                
+                for (const Position& position : intermediaryPositions) {
+                    if (board.MoveLeadsToCheck(piece, {MOVE_TYPE::WALK, position})) {
+                        moves.erase(moves.begin() + i);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!moves.empty()) {
+            possibleMovesPerPiece[piece] = moves;
+        }
+    }
+    
+    // If no legal moves, return nullptr (checkmate or stalemate)
+    if (possibleMovesPerPiece.empty()) {
+        return bestMove;
+    }
+    
+    // Evaluate each move using minimax
+    for (const auto& [piece, moves] : possibleMovesPerPiece) {
+        for (const Move& move : moves) {
+            // Create a copy of the board
+            Board boardCopy = board;
+            Piece* pieceCopy = boardCopy.At(piece->GetPosition());
+            
+            // Make the move on the copied board
+            boardCopy.DoMove(pieceCopy, move);
+            
+            // Evaluate the position using minimax
+            int score = Minimax(boardCopy, MAX_DEPTH - 1, 
+                               std::numeric_limits<int>::min(), 
+                               std::numeric_limits<int>::max(), 
+                               false);
+            
+            // If this move has a better score, update the best move
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = {piece, move};
+            }
+        }
+    }
+    
+    // If multiple moves have the same score, we could add some randomness
+    // to avoid predictable play (not implemented here)
+    
+    return bestMove;
+}
+
+int AI::Minimax(Board& board, int depth, int alpha, int beta, bool isMaximizing) {
+    // Base case: reached depth limit or game ended
+    if (depth == 0) {
+        return EvaluateBoard(board);
+    }
+    
+    PIECE_COLOR currentColor = isMaximizing ? aiColor : Piece::GetInverseColor(aiColor);
+    std::vector<Piece*> pieces = board.GetPiecesByColor(currentColor);
+    
+    if (isMaximizing) {
+        int maxEval = std::numeric_limits<int>::min();
+        
+        // For each piece of the current player
+        for (Piece* piece : pieces) {
+            std::vector<Move> moves = piece->GetPossibleMoves(board);
+            
+            // Filter invalid moves
+            for (int i = moves.size() - 1; i >= 0; i--) {
+                if (board.MoveLeadsToCheck(piece, moves[i])) {
+                    moves.erase(moves.begin() + i);
+                }
+            }
+            
+            // For each valid move
+            for (const Move& move : moves) {
+                // Create a copy of the board
+                Board boardCopy = board;
+                Piece* pieceCopy = boardCopy.At(piece->GetPosition());
+                
+                // Make the move
+                boardCopy.DoMove(pieceCopy, move);
+                
+                // Recursive evaluation
+                int eval = Minimax(boardCopy, depth - 1, alpha, beta, false);
+                maxEval = std::max(maxEval, eval);
+                
+                // Alpha-beta pruning
+                alpha = std::max(alpha, eval);
+                if (beta <= alpha) {
+                    break;
+                }
+            }
+            
+            // Early cutoff
+            if (beta <= alpha) {
+                break;
+            }
+        }
+        
+        return maxEval;
+    } else {
+        int minEval = std::numeric_limits<int>::max();
+        
+        // For each piece of the opponent
+        for (Piece* piece : pieces) {
+            std::vector<Move> moves = piece->GetPossibleMoves(board);
+            
+            // Filter invalid moves
+            for (int i = moves.size() - 1; i >= 0; i--) {
+                if (board.MoveLeadsToCheck(piece, moves[i])) {
+                    moves.erase(moves.begin() + i);
+                }
+            }
+            
+            // For each valid move
+            for (const Move& move : moves) {
+                // Create a copy of the board
+                Board boardCopy = board;
+                Piece* pieceCopy = boardCopy.At(piece->GetPosition());
+                
+                // Make the move
+                boardCopy.DoMove(pieceCopy, move);
+                
+                // Recursive evaluation
+                int eval = Minimax(boardCopy, depth - 1, alpha, beta, true);
+                minEval = std::min(minEval, eval);
+                
+                // Alpha-beta pruning
+                beta = std::min(beta, eval);
+                if (beta <= alpha) {
+                    break;
+                }
+            }
+            
+            // Early cutoff
+            if (beta <= alpha) {
+                break;
+            }
+        }
+        
+        return minEval;
+    }
+}
+
+int AI::EvaluateBoard(const Board& board) {
+    int score = 0;
+    
+    // Get all pieces
+    std::vector<Piece*> aiPieces = board.GetPiecesByColor(aiColor);
+    std::vector<Piece*> opponentPieces = board.GetPiecesByColor(Piece::GetInverseColor(aiColor));
+    
+    // Calculate material and positional advantage for AI pieces
+    for (Piece* piece : aiPieces) {
+        score += GetPieceValue(piece->type);
+        score += GetPositionalScore(piece);
+    }
+    
+    // Calculate material and positional advantage for opponent pieces (subtract)
+    for (Piece* piece : opponentPieces) {
+        score -= GetPieceValue(piece->type);
+        score -= GetPositionalScore(piece);
+    }
+    
+    // Check for check/checkmate situations
+    if (board.IsInCheck(Piece::GetInverseColor(aiColor))) {
+        score += 50; // Bonus for putting opponent in check
+    }
+    
+    if (board.IsInCheck(aiColor)) {
+        score -= 50; // Penalty for being in check
+    }
+    
+    return score;
+}
+
+int AI::GetPieceValue(PIECE_TYPE type) const {
+    switch (type) {
+        case PIECE_TYPE::PEON:
+            return 100;
+        case PIECE_TYPE::KNIGHT:
+            return 320;
+        case PIECE_TYPE::BISHOP:
+            return 330;
+        case PIECE_TYPE::ROOK:
+            return 500;
+        case PIECE_TYPE::QUEEN:
+            return 900;
+        case PIECE_TYPE::KING:
+            return 20000; // Very high value to prioritize king safety
+        default:
+            return 0;
+    }
+}
+
+int AI::GetPositionalScore(Piece* piece) const {
+    Position pos = piece->GetPosition();
+    int row = pos.i;
+    int col = pos.j;
+    
+    // For black pieces, mirror the table vertically
+    if (piece->color == PIECE_COLOR::C_BLACK) {
+        row = 7 - row;
+    }
+    
+    switch (piece->type) {
+        case PIECE_TYPE::PEON:
+            return pawnTable[row][col];
+        case PIECE_TYPE::KNIGHT:
+            return knightTable[row][col];
+        case PIECE_TYPE::BISHOP:
+            return bishopTable[row][col];
+        case PIECE_TYPE::ROOK:
+            return rookTable[row][col];
+        case PIECE_TYPE::QUEEN:
+            return queenTable[row][col];
+        case PIECE_TYPE::KING:
+            return kingTableMiddlegame[row][col];
+        default:
+            return 0;
+    }
+} 
+Displaying contents of D:\a\AI_project\raylib_chess\src\AI.h 
+// AI.h
+#ifndef RAY_CHESS_AI_H
+#define RAY_CHESS_AI_H
+
+#include "Board.h"
+#include "pieces/Piece.h"
+#include <vector>
+#include <map>
+#include <utility>
+
+class AI {
+public:
+    AI(PIECE_COLOR aiColor);
+    
+    // Main function to get the best move for the AI
+    std::pair<Piece*, Move> GetBestMove(Board& board);
+    
+private:
+    PIECE_COLOR aiColor;
+    const int MAX_DEPTH = 3; // Adjust depth based on desired difficulty
+    
+    // Min-Max algorithm with alpha-beta pruning
+    int Minimax(Board& board, int depth, int alpha, int beta, bool isMaximizing);
+    
+    // Evaluate board position
+    int EvaluateBoard(const Board& board);
+    
+    // Calculate material value for a piece
+    int GetPieceValue(PIECE_TYPE type) const;
+    
+    // Calculate positional score for a piece
+    int GetPositionalScore(Piece* piece) const;
+    
+    // Piece tables for positional evaluation
+    const int pawnTable[8][8] = {
+        {0,  0,  0,  0,  0,  0,  0,  0},
+        {50, 50, 50, 50, 50, 50, 50, 50},
+        {10, 10, 20, 30, 30, 20, 10, 10},
+        {5,  5, 10, 25, 25, 10,  5,  5},
+        {0,  0,  0, 20, 20,  0,  0,  0},
+        {5, -5,-10,  0,  0,-10, -5,  5},
+        {5, 10, 10,-20,-20, 10, 10,  5},
+        {0,  0,  0,  0,  0,  0,  0,  0}
+    };
+
+    const int knightTable[8][8] = {
+        {-50,-40,-30,-30,-30,-30,-40,-50},
+        {-40,-20,  0,  0,  0,  0,-20,-40},
+        {-30,  0, 10, 15, 15, 10,  0,-30},
+        {-30,  5, 15, 20, 20, 15,  5,-30},
+        {-30,  0, 15, 20, 20, 15,  0,-30},
+        {-30,  5, 10, 15, 15, 10,  5,-30},
+        {-40,-20,  0,  5,  5,  0,-20,-40},
+        {-50,-40,-30,-30,-30,-30,-40,-50}
+    };
+
+    const int bishopTable[8][8] = {
+        {-20,-10,-10,-10,-10,-10,-10,-20},
+        {-10,  0,  0,  0,  0,  0,  0,-10},
+        {-10,  0, 10, 10, 10, 10,  0,-10},
+        {-10,  5,  5, 10, 10,  5,  5,-10},
+        {-10,  0,  5, 10, 10,  5,  0,-10},
+        {-10,  5,  5,  5,  5,  5,  5,-10},
+        {-10,  0,  5,  0,  0,  5,  0,-10},
+        {-20,-10,-10,-10,-10,-10,-10,-20}
+    };
+
+    const int rookTable[8][8] = {
+        {0,  0,  0,  0,  0,  0,  0,  0},
+        {5, 10, 10, 10, 10, 10, 10,  5},
+        {-5,  0,  0,  0,  0,  0,  0, -5},
+        {-5,  0,  0,  0,  0,  0,  0, -5},
+        {-5,  0,  0,  0,  0,  0,  0, -5},
+        {-5,  0,  0,  0,  0,  0,  0, -5},
+        {-5,  0,  0,  0,  0,  0,  0, -5},
+        {0,  0,  0,  5,  5,  0,  0,  0}
+    };
+
+    const int queenTable[8][8] = {
+        {-20,-10,-10, -5, -5,-10,-10,-20},
+        {-10,  0,  0,  0,  0,  0,  0,-10},
+        {-10,  0,  5,  5,  5,  5,  0,-10},
+        {-5,  0,  5,  5,  5,  5,  0, -5},
+        {0,  0,  5,  5,  5,  5,  0, -5},
+        {-10,  5,  5,  5,  5,  5,  0,-10},
+        {-10,  0,  5,  0,  0,  0,  0,-10},
+        {-20,-10,-10, -5, -5,-10,-10,-20}
+    };
+
+    const int kingTableMiddlegame[8][8] = {
+        {-30,-40,-40,-50,-50,-40,-40,-30},
+        {-30,-40,-40,-50,-50,-40,-40,-30},
+        {-30,-40,-40,-50,-50,-40,-40,-30},
+        {-30,-40,-40,-50,-50,-40,-40,-30},
+        {-20,-30,-30,-40,-40,-30,-30,-20},
+        {-10,-20,-20,-20,-20,-20,-20,-10},
+        {20, 20,  0,  0,  0,  0, 20, 20},
+        {20, 30, 10,  0,  0, 10, 30, 20}
+    };
+};
+
+#endif //RAY_CHESS_AI_H 
 Displaying contents of D:\a\AI_project\raylib_chess\src\Board.cpp 
 #include "Board.h"
 #include "pieces/Peon.h"
@@ -282,6 +648,8 @@ Game::Game() {
 
     LoadTextures();
     LoadSounds();
+    ai = new AI(PIECE_COLOR::C_BLACK);
+    aiThinkingTimer = 0.0f;
 
     // Init the board and calculate the initial movements for the white player.
     board.Init();
@@ -332,9 +700,8 @@ Game::~Game() {
     for (auto const& kv : sounds) {
         UnloadSound(kv.second);
     }
-
+    delete ai;
     board.Clear();
-
     CloseAudioDevice();
     CloseWindow();
 }
@@ -343,8 +710,12 @@ void Game::Run() {
     while (!WindowShouldClose()){
         // Input.
         if (state == GAME_STATE::S_RUNNING) {
-            HandleInput();
-
+            if (turn == PIECE_COLOR::C_WHITE) {
+                HandleInput();
+            } else {
+                // Update AI
+                UpdateAI();
+            }
             // Getting new time.
             time += GetFrameTime();
         }
@@ -373,7 +744,9 @@ void Game::Run() {
 
             Renderer::RenderGuideText();
             Renderer::RenderInfoBar(round, time);
-
+            if (state == GAME_STATE::S_AI_THINKING) {
+                DrawText("AI thinking...", WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2, 24, WHITE);
+            }
             // Render promotion screen.
             if (state == GAME_STATE::S_PROMOTION) {
                 Renderer::RenderPromotionScreen(textures, selectedPiece->color);
@@ -582,8 +955,57 @@ bool Game::IsAnyMovePossible() {
 
     return false;
 }
+
+void Game::UpdateAI() {
+    if (turn == PIECE_COLOR::C_BLACK) {
+        if (state == GAME_STATE::S_RUNNING) {
+            // Start AI thinking
+            state = GAME_STATE::S_AI_THINKING;
+            aiThinkingTimer = 0.0f;
+        } else if (state == GAME_STATE::S_AI_THINKING) {
+            // Update AI thinking timer
+            aiThinkingTimer += GetFrameTime();
+            
+            // After a delay, make the AI move
+            if (aiThinkingTimer >= AI_THINKING_TIME) {
+                MakeAIMove();
+                state = GAME_STATE::S_RUNNING;
+            }
+        }
+    }
+}
+
+void Game::MakeAIMove() {
+    // Get the best move using minimax
+    std::pair<Piece*, Move> bestMove = ai->GetBestMove(board);
+    
+    // Make sure the AI found a valid move
+    if (bestMove.first != nullptr) {
+        // Play sound for AI move
+        PlaySound(sounds["click"]);
+        
+        // Make the AI move
+        board.DoMove(bestMove.first, bestMove.second);
+        
+        // Check if the move was a promotion
+        if (bestMove.second.type == MOVE_TYPE::PROMOTION || 
+            bestMove.second.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
+            // For AI, automatically choose queen for promotion
+            Piece* newPiece = new Queen(bestMove.first->GetPosition(), bestMove.first->color);
+            board.Destroy(bestMove.first->GetPosition());
+            board.Add(newPiece);
+        }
+        
+        // Switch turns
+        SwapTurns();
+    } else {
+        // No valid moves - game over
+        CheckForEndOfGame();
+    }
+}
  
 Displaying contents of D:\a\AI_project\raylib_chess\src\Game.h 
+// Add to Game.h
 #ifndef RAY_CHESS_GAME_H
 #define RAY_CHESS_GAME_H
 
@@ -594,13 +1016,15 @@ Displaying contents of D:\a\AI_project\raylib_chess\src\Game.h
 #include "Board.h"
 #include "raylib.h"
 #include "Move.h"
+#include "AI.h" // Add this include
 
 enum GAME_STATE {
     S_RUNNING,
     S_PROMOTION,
     S_WHITE_WINS,
     S_BLACK_WINS,
-    S_STALEMATE
+    S_STALEMATE,
+    S_AI_THINKING // Add a new state for AI thinking
 };
 
 class Game {
@@ -637,6 +1061,10 @@ private:
     void FilterMovesThatAttackOppositeKing();
     void FilterMovesThatLeadToCheck();
     bool IsAnyMovePossible();
+    
+    // AI-related methods
+    void UpdateAI();
+    void MakeAIMove();
 
     // Assets.
     std::map<std::string, Texture> textures;
@@ -644,7 +1072,7 @@ private:
 
     // Game state.
     Board board;
-    PIECE_COLOR turn = PIECE_COLOR::C_WHITE;
+    PIECE_COLOR turn = PIECE_COLOR::C_WHITE; // Player is white
     GAME_STATE state = GAME_STATE::S_RUNNING;
 
     // Selected piece/possible moves state.
@@ -654,10 +1082,77 @@ private:
     // Game information (current round and time).
     int round = 1;
     double time = 0;
+    
+    // AI
+    AI* ai;
+    float aiThinkingTimer;
+    const float AI_THINKING_TIME = 0.5f; // Visual delay before AI moves (seconds)
 };
 
-#endif //RAY_CHESS_GAME_H
- 
+#endif //RAY_CHESS_GAME_H 
+Displaying contents of D:\a\AI_project\raylib_chess\src\Gameconfig.h 
+// GameConfig.h
+#ifndef RAY_CHESS_GAMECONFIG_H
+#define RAY_CHESS_GAMECONFIG_H
+
+enum AI_DIFFICULTY {
+    EASY,
+    MEDIUM,
+    HARD
+};
+
+class GameConfig {
+public:
+    static GameConfig& GetInstance() {
+        static GameConfig instance;
+        return instance;
+    }
+    
+    void SetAIDifficulty(AI_DIFFICULTY difficulty) {
+        aiDifficulty = difficulty;
+    }
+    
+    AI_DIFFICULTY GetAIDifficulty() const {
+        return aiDifficulty;
+    }
+    
+    int GetAIDepth() const {
+        switch (aiDifficulty) {
+            case EASY:
+                return 2;
+            case MEDIUM:
+                return 3;
+            case HARD:
+                return 4;
+            default:
+                return 3;
+        }
+    }
+    
+    void SetPlayerColor(PIECE_COLOR color) {
+        playerColor = color;
+    }
+    
+    PIECE_COLOR GetPlayerColor() const {
+        return playerColor;
+    }
+    
+    PIECE_COLOR GetAIColor() const {
+        return playerColor == PIECE_COLOR::C_WHITE ? PIECE_COLOR::C_BLACK : PIECE_COLOR::C_WHITE;
+    }
+    
+private:
+    GameConfig() : aiDifficulty(MEDIUM), playerColor(PIECE_COLOR::C_WHITE) {}
+    
+    AI_DIFFICULTY aiDifficulty;
+    PIECE_COLOR playerColor;
+    
+    // Singleton: prevent copy construction and assignment
+    GameConfig(const GameConfig&) = delete;
+    GameConfig& operator=(const GameConfig&) = delete;
+};
+
+#endif //RAY_CHESS_GAMECONFIG_H 
 Displaying contents of D:\a\AI_project\raylib_chess\src\Main.cpp 
 #include "Game.h"
 

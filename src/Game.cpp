@@ -10,7 +10,7 @@
 #include <filesystem>
 #include <iostream>
 
-const std::string Game::ASSETS_PATH = "../art";
+const std::string Game::ASSETS_PATH = "./art";
 const std::string Game::TEXTURES_PATH = Game::ASSETS_PATH;
 const std::string Game::SOUNDS_PATH = Game::ASSETS_PATH + "/sounds";
 
@@ -25,6 +25,8 @@ Game::Game() {
 
     LoadTextures();
     LoadSounds();
+    ai = new AI(PIECE_COLOR::C_BLACK);
+    aiThinkingTimer = 0.0f;
 
     // Init the board and calculate the initial movements for the white player.
     board.Init();
@@ -75,9 +77,8 @@ Game::~Game() {
     for (auto const& kv : sounds) {
         UnloadSound(kv.second);
     }
-
+    delete ai;
     board.Clear();
-
     CloseAudioDevice();
     CloseWindow();
 }
@@ -86,8 +87,12 @@ void Game::Run() {
     while (!WindowShouldClose()){
         // Input.
         if (state == GAME_STATE::S_RUNNING) {
-            HandleInput();
-
+            if (turn == PIECE_COLOR::C_WHITE) {
+                HandleInput();
+            } else {
+                // Update AI
+                UpdateAI();
+            }
             // Getting new time.
             time += GetFrameTime();
         }
@@ -116,7 +121,9 @@ void Game::Run() {
 
             Renderer::RenderGuideText();
             Renderer::RenderInfoBar(round, time);
-
+            if (state == GAME_STATE::S_AI_THINKING) {
+                DrawText("AI thinking...", WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2, 24, WHITE);
+            }
             // Render promotion screen.
             if (state == GAME_STATE::S_PROMOTION) {
                 Renderer::RenderPromotionScreen(textures, selectedPiece->color);
@@ -324,4 +331,52 @@ bool Game::IsAnyMovePossible() {
     }
 
     return false;
+}
+
+void Game::UpdateAI() {
+    if (turn == PIECE_COLOR::C_BLACK) {
+        if (state == GAME_STATE::S_RUNNING) {
+            // Start AI thinking
+            state = GAME_STATE::S_AI_THINKING;
+            aiThinkingTimer = 0.0f;
+        } else if (state == GAME_STATE::S_AI_THINKING) {
+            // Update AI thinking timer
+            aiThinkingTimer += GetFrameTime();
+            
+            // After a delay, make the AI move
+            if (aiThinkingTimer >= AI_THINKING_TIME) {
+                MakeAIMove();
+                state = GAME_STATE::S_RUNNING;
+            }
+        }
+    }
+}
+
+void Game::MakeAIMove() {
+    // Get the best move using minimax
+    std::pair<Piece*, Move> bestMove = ai->GetBestMove(board);
+    
+    // Make sure the AI found a valid move
+    if (bestMove.first != nullptr) {
+        // Play sound for AI move
+        PlaySound(sounds["click"]);
+        
+        // Make the AI move
+        board.DoMove(bestMove.first, bestMove.second);
+        
+        // Check if the move was a promotion
+        if (bestMove.second.type == MOVE_TYPE::PROMOTION || 
+            bestMove.second.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
+            // For AI, automatically choose queen for promotion
+            Piece* newPiece = new Queen(bestMove.first->GetPosition(), bestMove.first->color);
+            board.Destroy(bestMove.first->GetPosition());
+            board.Add(newPiece);
+        }
+        
+        // Switch turns
+        SwapTurns();
+    } else {
+        // No valid moves - game over
+        CheckForEndOfGame();
+    }
 }

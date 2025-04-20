@@ -1,3 +1,4 @@
+// Add to Game.h
 #ifndef RAY_CHESS_GAME_H
 #define RAY_CHESS_GAME_H
 
@@ -8,13 +9,15 @@
 #include "Board.h"
 #include "raylib.h"
 #include "Move.h"
+#include "AI.h" // Add this include
 
 enum GAME_STATE {
     S_RUNNING,
     S_PROMOTION,
     S_WHITE_WINS,
     S_BLACK_WINS,
-    S_STALEMATE
+    S_STALEMATE,
+    S_AI_THINKING // Add a new state for AI thinking
 };
 
 class Game {
@@ -51,6 +54,10 @@ private:
     void FilterMovesThatAttackOppositeKing();
     void FilterMovesThatLeadToCheck();
     bool IsAnyMovePossible();
+    
+    // AI-related methods
+    void UpdateAI();
+    void MakeAIMove();
 
     // Assets.
     std::map<std::string, Texture> textures;
@@ -58,7 +65,7 @@ private:
 
     // Game state.
     Board board;
-    PIECE_COLOR turn = PIECE_COLOR::C_WHITE;
+    PIECE_COLOR turn = PIECE_COLOR::C_WHITE; // Player is white
     GAME_STATE state = GAME_STATE::S_RUNNING;
 
     // Selected piece/possible moves state.
@@ -68,6 +75,11 @@ private:
     // Game information (current round and time).
     int round = 1;
     double time = 0;
+    
+    // AI
+    AI* ai;
+    float aiThinkingTimer;
+    const float AI_THINKING_TIME = 0.5f; // Visual delay before AI moves (seconds)
 };
 
 #endif //RAY_CHESS_GAME_H
