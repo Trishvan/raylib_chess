@@ -17,7 +17,7 @@ public:
     
 private:
     PIECE_COLOR aiColor;
-    const int MAX_DEPTH = 3; // Adjust depth based on desired difficulty
+    const int MAX_DEPTH = 1; // Reduced from 2 to 1 for immediate response
     
     // Min-Max algorithm with alpha-beta pruning
     int Minimax(Board& board, int depth, int alpha, int beta, bool isMaximizing);

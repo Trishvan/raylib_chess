@@ -13,6 +13,7 @@ std::pair<Piece*, Move> AI::GetBestMove(Board& board) {
     std::vector<Piece*> pieces = board.GetPiecesByColor(aiColor);
     std::pair<Piece*, Move> bestMove = {nullptr, {}};
     int bestScore = std::numeric_limits<int>::min();
+    bool foundValidMove = false;
     
     // Map to store all possible moves per piece
     std::map<Piece*, std::vector<Move>> possibleMovesPerPiece;
@@ -20,42 +21,23 @@ std::pair<Piece*, Move> AI::GetBestMove(Board& board) {
     // Calculate all possible moves for all pieces
     for (Piece* piece : pieces) {
         std::vector<Move> moves = piece->GetPossibleMoves(board);
+        std::vector<Move> validMoves;
         
         // Filter moves that lead to check
-        for (int i = moves.size() - 1; i >= 0; i--) {
-            if (board.MoveLeadsToCheck(piece, moves[i])) {
-                moves.erase(moves.begin() + i);
+        for (const Move& move : moves) {
+            if (!board.MoveLeadsToCheck(piece, move)) {
+                validMoves.push_back(move);
             }
         }
         
-        // Special handling for castling
-        for (int i = moves.size() - 1; i >= 0; i--) {
-            Move& move = moves[i];
-            if (move.type == MOVE_TYPE::SHORT_CASTLING || move.type == MOVE_TYPE::LONG_CASTLING) {
-                std::vector<Position> intermediaryPositions;
-                
-                if (move.type == MOVE_TYPE::SHORT_CASTLING) {
-                    intermediaryPositions = {{piece->GetPosition().i, 5}, {piece->GetPosition().i, 6}};
-                } else {
-                    intermediaryPositions = {{piece->GetPosition().i, 3}, {piece->GetPosition().i, 2}};
-                }
-                
-                for (const Position& position : intermediaryPositions) {
-                    if (board.MoveLeadsToCheck(piece, {MOVE_TYPE::WALK, position})) {
-                        moves.erase(moves.begin() + i);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if (!moves.empty()) {
-            possibleMovesPerPiece[piece] = moves;
+        if (!validMoves.empty()) {
+            possibleMovesPerPiece[piece] = validMoves;
+            foundValidMove = true;
         }
     }
     
     // If no legal moves, return nullptr (checkmate or stalemate)
-    if (possibleMovesPerPiece.empty()) {
+    if (!foundValidMove) {
         return bestMove;
     }
     
@@ -83,8 +65,17 @@ std::pair<Piece*, Move> AI::GetBestMove(Board& board) {
         }
     }
     
-    // If multiple moves have the same score, we could add some randomness
-    // to avoid predictable play (not implemented here)
+    // Ensure we return a valid move if any exists
+    if (foundValidMove && bestMove.first == nullptr) {
+        // If we somehow didn't select a move but have valid moves,
+        // just take the first valid move we find
+        for (const auto& [piece, moves] : possibleMovesPerPiece) {
+            if (!moves.empty()) {
+                bestMove = {piece, moves[0]};
+                break;
+            }
+        }
+    }
     
     return bestMove;
 }

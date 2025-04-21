@@ -334,49 +334,37 @@ bool Game::IsAnyMovePossible() {
 }
 
 void Game::UpdateAI() {
-    if (turn == PIECE_COLOR::C_BLACK) {
-        if (state == GAME_STATE::S_RUNNING) {
-            // Start AI thinking
-            state = GAME_STATE::S_AI_THINKING;
-            aiThinkingTimer = 0.0f;
-        } else if (state == GAME_STATE::S_AI_THINKING) {
-            // Update AI thinking timer
-            aiThinkingTimer += GetFrameTime();
+    if (turn == PIECE_COLOR::C_BLACK && state == GAME_STATE::S_RUNNING) {
+        // Start AI thinking
+        state = GAME_STATE::S_AI_THINKING;
+        
+        // Get the best move using minimax
+        std::pair<Piece*, Move> bestMove = ai->GetBestMove(board);
+        
+        // Make sure the AI found a valid move
+        if (bestMove.first != nullptr) {
+            // Play sound for AI move
+            PlaySound(sounds["click"]);
             
-            // After a delay, make the AI move
-            if (aiThinkingTimer >= AI_THINKING_TIME) {
-                MakeAIMove();
-                state = GAME_STATE::S_RUNNING;
+            // Make the AI move
+            board.DoMove(bestMove.first, bestMove.second);
+            
+            // Check if the move was a promotion
+            if (bestMove.second.type == MOVE_TYPE::PROMOTION || 
+                bestMove.second.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
+                // For AI, automatically choose queen for promotion
+                Piece* newPiece = new Queen(bestMove.first->GetPosition(), bestMove.first->color);
+                board.Destroy(bestMove.first->GetPosition());
+                board.Add(newPiece);
             }
         }
+        
+        // Always return to running state and swap turns
+        state = GAME_STATE::S_RUNNING;
+        SwapTurns();
     }
 }
 
 void Game::MakeAIMove() {
-    // Get the best move using minimax
-    std::pair<Piece*, Move> bestMove = ai->GetBestMove(board);
-    
-    // Make sure the AI found a valid move
-    if (bestMove.first != nullptr) {
-        // Play sound for AI move
-        PlaySound(sounds["click"]);
-        
-        // Make the AI move
-        board.DoMove(bestMove.first, bestMove.second);
-        
-        // Check if the move was a promotion
-        if (bestMove.second.type == MOVE_TYPE::PROMOTION || 
-            bestMove.second.type == MOVE_TYPE::ATTACK_AND_PROMOTION) {
-            // For AI, automatically choose queen for promotion
-            Piece* newPiece = new Queen(bestMove.first->GetPosition(), bestMove.first->color);
-            board.Destroy(bestMove.first->GetPosition());
-            board.Add(newPiece);
-        }
-        
-        // Switch turns
-        SwapTurns();
-    } else {
-        // No valid moves - game over
-        CheckForEndOfGame();
-    }
+    // Function removed - logic moved to UpdateAI
 }

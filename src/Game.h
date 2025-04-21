@@ -79,7 +79,7 @@ private:
     // AI
     AI* ai;
     float aiThinkingTimer;
-    const float AI_THINKING_TIME = 0.5f; // Visual delay before AI moves (seconds)
+    const float AI_THINKING_TIME = 0.1f; // Reduced from 0.5f to 0.1f for faster response
 };
 
 #endif //RAY_CHESS_GAME_H

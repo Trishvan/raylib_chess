@@ -188,6 +188,10 @@ std::string Renderer::GetTextureNameFromMoveType(MOVE_TYPE moveType) {
         case MOVE_TYPE::PROMOTION:
         case MOVE_TYPE::ATTACK_AND_PROMOTION:
             return "promotion";
+        default:
+            // Handle unexpected move types - you might want to log an error
+            // or return a sensible default texture name.
+            return "default_move_texture"; // Or some other default
     }
 }
 

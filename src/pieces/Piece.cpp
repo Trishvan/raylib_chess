@@ -30,7 +30,7 @@ bool Piece::HasMoved() {
     return hasMoved;
 }
 
-Piece *Piece::CreatePieceByType(PIECE_TYPE type, const Position& position, PIECE_COLOR color) {
+Piece* Piece::CreatePieceByType(PIECE_TYPE type, const Position& position, PIECE_COLOR color) {
     switch (type) {
         case PEON:
             return new Peon(position, color);
@@ -44,6 +44,8 @@ Piece *Piece::CreatePieceByType(PIECE_TYPE type, const Position& position, PIECE
             return new Queen(position, color);
         case KING:
             return new King(position, color);
+        default:
+            return nullptr; // Indicate failure to create piece
     }
 }
 
@@ -65,9 +67,10 @@ std::string Piece::GetPieceCharacterByType(PIECE_TYPE type) {
             return "q";
         case KING:
             return "k";
+        default:
+            return ""; // Or some other default character
     }
 }
-
 
 
 
